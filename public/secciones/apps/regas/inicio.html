@@ -37,6 +37,34 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
+        
+        /* Por defecto, si la caseta está vacía, se oculta físicamente */
+        .caseta-vacia-oculta {
+            display: none !important;
+        }
+
+        /* Pero si estamos arrastrando, se muestran con un estilo fantasma elegante */
+        .modo-arrastrando .caseta-vacia-oculta {
+            display: flex !important;
+            opacity: 0.40;
+            border-style: dashed !important;
+            border-width: 2px !important;
+            border-color: #cbd5e1 !important; /* slate-300 */
+            background-color: rgba(241, 245, 249, 0.5) !important; /* slate-100 */
+            filter: grayscale(100%);
+            pointer-events: auto !important; /* Esencial para permitir el DROP */
+            box-shadow: none !important;
+            transform: scale(0.98);
+            transition: all 0.2s ease;
+        }
+
+        /* Efecto visual al pasar el guardia arrastrado sobre una caseta fantasma */
+        .modo-arrastrando .caseta-vacia-oculta:hover {
+            border-color: #71717a !important; /* zinc-500 */
+            background-color: rgba(226, 232, 240, 0.8) !important; /* slate-200 */
+            opacity: 0.75;
+            transform: scale(1);
+        }
     </style>
 </head>
 <body class="m-0 p-0 overflow-hidden w-full h-screen flex flex-col justify-start bg-slate-50">
@@ -98,7 +126,7 @@
 
     <!-- ÁREA DE CONTENIDO: Contenedor estanco para los subcontenedores de casetas de la pestaña activa -->
     <main class="flex-1 w-full min-h-0 overflow-y-auto">
-        <div id="contenedor-casetas" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4 md:p-6 pb-24">
+        <div id="contenedor-casetas" class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4 p-4 md:p-6 pb-24 w-full">
             <!-- Se inyectan las casetas de IndexedDB dinámicamente -->
         </div>
     </main>
@@ -269,11 +297,11 @@
     <!-- CONTENEDOR DE TOASTS -->
     <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
 
-    <!-- SCRIPT PRINCIPAL: MÓDULO CON INTEGRACIÓN DE FIREBASE Y CONFIG.JS -->
+    <!-- SCRIPT PRINCIPAL: MÓDULO CON INTEGRACIÓN DE FIREBASE AND CONFIG.JS -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getStorage, ref, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-        import { Download_DB_Regas,firebaseConfig } from "../../../config.js";
+        import { Download_DB_Regas, firebaseConfig } from "../../../config.js";
 
         // ESTADOS DE LA APLICACIÓN
         let fechaSeleccionada = new Date(); // Fecha de consulta
@@ -288,6 +316,9 @@
         const ANCHO_BOTON = 60;
         const GAP = 8;
         const CONTROLES_ANCHO_APROX = 180; // Ancho sumado de botones de flechas + márgenes
+
+        // Variable de estado para controlar el arrastre
+        let isDragging = false;
 
         // INICIALIZACIÓN DE FIREBASE STORAGE CON GUARDRAILS
         let storage = null;
@@ -331,6 +362,73 @@
                 reader.onloadend = () => resolve(reader.result);
                 reader.onerror = reject;
                 reader.readAsDataURL(blob);
+            });
+        }
+
+        // CONTROLADORES DE ARRASTRE (DRAG AND DROP)
+        function iniciarDrag(e, guardId) {
+            isDragging = true;
+            e.dataTransfer.setData("text/plain", guardId);
+            
+            // Guardrail crítico para motores Chromium:
+            // Al cambiar clases CSS del body que revelan layouts ocultos síncronamente,
+            // el navegador asume un cambio estructural drástico y aborta el drag de inmediato.
+            // Diferimos la adición de la clase modo-arrastrando al siguiente tick con setTimeout.
+            setTimeout(() => {
+                document.body.classList.add('modo-arrastrando');
+            }, 0);
+        }
+
+        function finalizarDrag() {
+            isDragging = false;
+            document.body.classList.remove('modo-arrastrando');
+        }
+        
+        async function soltarDrag(e, nombreCaseta) {
+            e.preventDefault();
+            const guardId = e.dataTransfer.getData("text/plain");
+            if (guardId) {
+                // Actualizamos IndexedDB síncronamente antes de redibujar la UI
+                await actualizarAsignacionDB(guardId, nombreCaseta);
+            }
+            finalizarDrag();
+            renderizarCasetas(); // Redibujamos para reflejar el cambio en pantalla
+        }
+
+        // Función para actualizar y asegurar la transacción en la base de datos IndexedDB
+        function actualizarAsignacionDB(id, nuevaCaseta) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    const db = await getDB();
+                    const tx = db.transaction("regas", "readwrite");
+                    const store = tx.objectStore("regas");
+                    const fechaKey = formatearFechaRegas(fechaSeleccionada);
+                    
+                    const req = store.get(fechaKey);
+                    req.onsuccess = () => {
+                        let regasDia = req.result || {};
+                        let turnKey = pestañaActiva === 'enturno' ? obtenerTurnoActualPorHora() : pestañaActiva;
+                        
+                        if (regasDia[id]) {
+                            if (!regasDia[id][turnKey]) {
+                                regasDia[id][turnKey] = {};
+                            }
+                            regasDia[id][turnKey].Caseta = nuevaCaseta;
+                            store.put(regasDia, fechaKey);
+                        }
+                    };
+
+                    tx.oncomplete = () => {
+                        mostrarToast(`Guardia reasignado a ${nuevaCaseta}`);
+                        resolve();
+                    };
+
+                    tx.onerror = (e) => {
+                        reject(e.target.error);
+                    };
+                } catch (err) {
+                    reject(err);
+                }
             });
         }
 
@@ -664,7 +762,6 @@
                 for (const [id, info] of Object.entries(regasDia)) {
                     if (info && info[turnKey]) {
                         const casetaAsignada = info[turnKey].Caseta;
-                        // Si no tiene caseta asignada o es explícitamente ausente, lo listamos
                         if (!casetaAsignada || String(casetaAsignada).trim().length === 0 || String(casetaAsignada).toLowerCase() === 'ausente') {
                             ausentes.push({ id, ...info });
                         }
@@ -707,7 +804,6 @@
                     `;
                     contenedorCasetas.appendChild(card);
 
-                    // Cargar imagen de forma asíncrona en background
                     obtenerFotoGuardia(guard.id).then(base64 => {
                         const el = document.getElementById(imgId);
                         if (el && base64) {
@@ -721,39 +817,46 @@
             // RENDERIZADO REGULAR DE CASETA CON GUARDIA DE REGAS
             casetas.forEach(caseta => {
                 const nombreCaseta = caseta.nombre || "Caseta sin Nombre";
-                const card = document.createElement('div');
-                const color = obtenerColorCaseta(nombreCaseta);
                 
-                let enVivoInfo = "";
-                if (pestañaActiva === 'enturno') {
-                    enVivoInfo = `
-                        <span class="px-1.5 py-0.5 bg-white/10 text-white/90 rounded text-[7.5px] font-extrabold tracking-wider uppercase flex items-center gap-1 border border-white/10 shrink-0">
-                            <span class="w-1 h-1 rounded-full bg-green-400 animate-pulse"></span> vivo
-                        </span>
-                    `;
-                } else {
-                    enVivoInfo = `
-                        <span class="px-1.5 py-0.5 bg-white/10 text-white/90 rounded text-[7.5px] font-bold uppercase tracking-wider border border-white/10 shrink-0">
-                            ${turnKey}
-                        </span>
-                    `;
-                }
-
-                // Buscar guardia asignado a esta caseta en regasDia para la fecha y el turno activo
-                let asignadoNombre = "";
-                let asignadoId = "";
+                // Recopilar todos los guardias asignados a esta caseta para el turno activo
+                const guardiasAsignados = [];
                 
+                // 1. Buscar guardias desde regasDia (Asignaciones dinámicas con ID)
                 for (const [id, info] of Object.entries(regasDia)) {
                     if (info && info[turnKey] && info[turnKey].Caseta) {
                         if (String(info[turnKey].Caseta).trim().toLowerCase() === nombreCaseta.trim().toLowerCase()) {
-                            asignadoNombre = info.nombre || `ID: ${id}`;
-                            asignadoId = id;
-                            break;
+                            guardiasAsignados.push({
+                                id: id,
+                                nombre: info.nombre || `ID: ${id}`,
+                                tipo: 'regas'
+                            });
                         }
                     }
                 }
 
-                // Configuración de estilo de cabecera
+                // 2. Buscar guardia asignado manualmente (escrito directo en Caseta)
+                const fechaKey = formatearFechaKey(fechaSeleccionada);
+                const manualGuardia = caseta.turnos?.[fechaKey]?.[turnKey];
+                if (manualGuardia && manualGuardia !== "null" && manualGuardia !== "undefined" && manualGuardia.trim() !== "") {
+                    // Evitamos duplicar si el guardia manual ya se mapeó por ID
+                    const yaExiste = guardiasAsignados.some(g => g.nombre.toLowerCase() === manualGuardia.trim().toLowerCase());
+                    if (!yaExiste) {
+                        guardiasAsignados.push({
+                            id: `manual-${nombreCaseta.replace(/\s+/g, '-')}`,
+                            nombre: manualGuardia,
+                            tipo: 'manual'
+                        });
+                    }
+                }
+
+                const card = document.createElement('div');
+                const color = obtenerColorCaseta(nombreCaseta);
+                
+                let enVivoInfo = pestañaActiva === 'enturno' 
+                    ? `<span class="px-1.5 py-0.5 bg-white/10 text-white/90 rounded text-[7.5px] font-extrabold tracking-wider uppercase flex items-center gap-1 border border-white/10 shrink-0"><span class="w-1 h-1 rounded-full bg-green-400 animate-pulse"></span> vivo</span>`
+                    : `<span class="px-1.5 py-0.5 bg-white/10 text-white/90 rounded text-[7.5px] font-bold uppercase tracking-wider border border-white/10 shrink-0">${turnKey}</span>`;
+
+                // Configuración de estilo de cabecera (Presets / Dinámicos)
                 let headerBackgroundStyle = "";
                 let headerClasses = "";
                 if (caseta.bgHeader && caseta.bgHeader.preset !== undefined) {
@@ -769,9 +872,64 @@
                     headerClasses = `${color.bg} ${color.text}`;
                 }
 
-                const imgId = `guard-img-${nombreCaseta.replace(/\s+/g, '-')}`;
+                // --- LÓGICA DE OCULTAMIENTO INTELIGENTE ---
+                // No retornamos de inmediato para que la caseta vacía exista en el DOM y responda al Drag
+                const estaVacia = guardiasAsignados.length === 0;
+                const claseOcultar = estaVacia ? 'caseta-vacia-oculta' : '';
 
-                card.className = `bg-white border-0 border-l-4 ${color.borderL} rounded-r-xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden relative pb-1`;
+                // Estilo visual si la caseta está vacía en modo arrastre (Modo Fantasma)
+                const ghostStyle = (!estaVacia) ? 'hover:shadow-md' : '';
+
+                card.className = `bg-white border-0 border-l-4 ${color.borderL} rounded-r-xl shadow-sm transition-all flex flex-col justify-between overflow-hidden relative pb-1 ${claseOcultar} ${ghostStyle}`;
+                
+                // Atributos Drag & Drop de la caseta receptora
+                card.setAttribute('ondragover', 'event.preventDefault()');
+                card.setAttribute('ondrop', `soltarDrag(event, '${escapeHtml(nombreCaseta)}')`);
+
+                // Construcción de la interfaz de la lista de guardias (Soporta múltiples elementos)
+                let panelGuardiasHTML = "";
+                if (guardiasAsignados.length > 0) {
+                    panelGuardiasHTML = guardiasAsignados.map(g => {
+                        const imgIdGuardia = `guard-img-${nombreCaseta.replace(/\s+/g, '-')}-${g.id}`;
+                        const esDraggable = g.tipo === 'regas'; // Solo los reales se pueden arrastrar
+                        return `
+                            <div class="flex items-center justify-between bg-white/70 p-1.5 rounded-lg border border-slate-200/40 min-h-[38px] transition-all hover:bg-zinc-50/80 shadow-sm" 
+                                 ${esDraggable ? `draggable="true" ondragstart="iniciarDrag(event, '${g.id}')" ondragend="finalizarDrag()"` : ''}>
+                                <div class="flex items-center gap-2 min-w-0 ${esDraggable ? 'cursor-grab active:cursor-grabbing' : ''}">
+                                    <div id="${imgIdGuardia}" class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/60 overflow-hidden">
+                                        <i class="fa-solid fa-user text-slate-300 text-[9px]"></i>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <span class="text-[7px] font-bold text-slate-400 tracking-wider uppercase block leading-none">Guardia</span>
+                                        <p class="text-[10px] font-extrabold text-slate-700 truncate mt-0.5">
+                                            ${escapeHtml(g.nombre)}
+                                        </p>
+                                    </div>
+                                </div>
+                                ${g.tipo === 'manual' ? `<span class="text-[7px] font-semibold bg-amber-50 text-amber-600 border border-amber-100/60 px-1 py-0.5 rounded uppercase tracking-wide">Manual</span>` : ''}
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    panelGuardiasHTML = `
+                        <div class="flex items-center justify-between p-1.5 min-h-[38px]">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/30 overflow-hidden">
+                                    <i class="fa-solid fa-user text-slate-300 text-[9px]"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <span class="text-[7px] font-bold text-slate-400 tracking-wider uppercase block leading-none">Guardia</span>
+                                    <p class="text-[10px] font-semibold text-slate-400 italic mt-0.5">
+                                        Sin asignar
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const nombresManualAsignacion = guardiasAsignados.map(g => g.nombre).join(', ');
+
                 card.innerHTML = `
                     <div class="flex flex-col">
                         <!-- ENCABEZADO METÁLICO ULTRA-COMPACTO -->
@@ -788,9 +946,17 @@
                             </div>
                             
                             <!-- CONTROLES METÁLICOS -->
+                           <!-- CONTROLES METÁLICOS -->
                             <div class="flex items-center gap-1 shrink-0">
                                 ${enVivoInfo}
-                                <button onclick="abrirModalAsignacion('${escapeHtml(nombreCaseta)}', '${escapeHtml(asignadoNombre)}', '${turnKey}')" 
+                                <!-- Botón de personalizar en el encabezado -->
+                                <button onclick="abrirModalPersonalizar('${escapeHtml(nombreCaseta)}')"
+                                        title="Personalizar color de encabezado"
+                                        class="w-5.5 h-5.5 rounded bg-white/15 hover:bg-white/25 active:scale-95 flex items-center justify-center transition-all shrink-0 border border-white/5 shadow-sm text-white/90"
+                                >
+                                    <i class="fa-solid fa-palette text-[9px]"></i>
+                                </button>
+                                <button onclick="abrirModalAsignacion('${escapeHtml(nombreCaseta)}', '${escapeHtml(nombresManualAsignacion)}', '${turnKey}')" 
                                         title="Asignar Guardia Manual" 
                                         class="w-5.5 h-5.5 rounded bg-white/15 hover:bg-white/25 active:scale-95 flex items-center justify-center transition-all shrink-0 border border-white/5 shadow-sm"
                                 >
@@ -799,53 +965,31 @@
                             </div>
                         </div>
                         
-                        <!-- PANEL DE ESTATUS DEL GUARDIA CON CONECTOR DE FOTO CIRCULAR -->
-                        <div class="px-2.5 py-1.5 bg-slate-50/40 flex items-center justify-between min-h-[44px] relative gap-2">
-                            <div class="flex items-center gap-2 min-w-0">
-                                <!-- Contenedor de la Foto de Guardia de perfil -->
-                                <div id="${imgId}" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/60 overflow-hidden">
-                                    <i class="fa-solid fa-user text-slate-300 text-[10px]"></i>
-                                </div>
-                                <div class="min-w-0">
-                                    <span class="text-[8px] font-bold text-slate-400 tracking-wider uppercase block leading-none">Guardia</span>
-                                    ${asignadoNombre ? `
-                                        <p class="text-[11px] font-extrabold text-slate-700 truncate mt-0.5">
-                                            ${escapeHtml(asignadoNombre)}
-                                        </p>
-                                    ` : `
-                                        <p class="text-[10px] font-semibold text-slate-400 italic mt-0.5">
-                                            Sin asignar
-                                        </p>
-                                    `}
-                                </div>
-                            </div>
-
-                            <!-- BOTÓN DE PERSONALIZACIÓN DE COLOR (Abajo a la derecha) -->
-                            <button onclick="abrirModalPersonalizar('${escapeHtml(nombreCaseta)}')"
-                                    title="Personalizar color de encabezado"
-                                    class="w-5 h-5 rounded bg-slate-100 hover:bg-zinc-900 hover:text-white flex items-center justify-center text-slate-400 transition-all active:scale-90 shadow-sm border border-slate-200/40 shrink-0"
-                            >
-                                <i class="fa-solid fa-palette text-[8px]"></i>
-                            </button>
+                        <!-- PANEL DE ESTATUS DE LOS GUARDIAS (Soporta múltiples elementos de forma estéticamente unificada) -->
+                        <div class="p-2 bg-slate-50/40 flex flex-col gap-1.5 min-h-[44px]">
+                            ${panelGuardiasHTML}
                         </div>
                     </div>
                 `;
                 contenedorCasetas.appendChild(card);
 
-                // Cargar imagen de forma asíncrona en background si existe asignación
-                if (asignadoId) {
-                    obtenerFotoGuardia(asignadoId).then(base64 => {
-                        const el = document.getElementById(imgId);
-                        if (el) {
-                            if (base64) {
-                                el.innerHTML = `<img src="${base64}" class="w-full h-full object-cover rounded-full" onerror="this.src='https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80'"/>`;
-                            } else {
-                                const inicial = asignadoNombre ? asignadoNombre.charAt(0).toUpperCase() : "G";
-                                el.innerHTML = `<span class="text-[10px] font-black text-slate-500">${inicial}</span>`;
+                // Cargar imágenes de perfil asíncronas para cada elemento
+                guardiasAsignados.forEach(g => {
+                    if (g.tipo === 'regas') {
+                        const imgIdGuardia = `guard-img-${nombreCaseta.replace(/\s+/g, '-')}-${g.id}`;
+                        obtenerFotoGuardia(g.id).then(base64 => {
+                            const el = document.getElementById(imgIdGuardia);
+                            if (el) {
+                                if (base64) {
+                                    el.innerHTML = `<img src="${base64}" class="w-full h-full object-cover rounded-full"/>`;
+                                } else {
+                                    const inicial = g.nombre ? g.nombre.charAt(0).toUpperCase() : "G";
+                                    el.innerHTML = `<span class="text-[9px] font-black text-slate-500">${escapeHtml(inicial)}</span>`;
+                                }
                             }
-                        }
-                    });
-                }
+                        });
+                    }
+                });
             });
         }
 
@@ -1165,12 +1309,14 @@
             renderizarCasetas();
         }
 
+        // CONTROLADORES DE NAVEGACIÓN DE DÍAS
         function navegarDias(numDias) {
             const nuevaFecha = new Date(fechaSeleccionada);
             nuevaFecha.setDate(fechaSeleccionada.getDate() + numDias);
             cambiarFecha(nuevaFecha);
         }
 
+        // CONTROLADOR DE ACTIVACIÓN DE PESTAÑAS
         function activarPestaña(tabId) {
             pestañaActiva = tabId;
 
@@ -1235,7 +1381,7 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // EXPOSICIÓN DE LAS FUNCIONES AL CONTEXTO WINDOW PARA LAS ACCIONES ONCLICK
+        // EXPOSICIÓN DE LAS FUNCIONES AL CONTEXTO WINDOW PARA LAS ACCIONES ONCLICK / DRAG
         window.navegarDias = navegarDias;
         window.cambiarFecha = cambiarFecha;
         window.activarPestaña = activarPestaña;
@@ -1250,6 +1396,9 @@
         window.cambiarOpacidadSlider = cambiarOpacidadSlider;
         window.guardarCambioPersonalizacion = guardarCambioPersonalizacion;
         window.restaurarDefaultColor = restaurarDefaultColor;
+        window.iniciarDrag = iniciarDrag;
+        window.finalizarDrag = finalizarDrag;
+        window.soltarDrag = soltarDrag;
 
         // INICIALIZACIÓN DIRECTA (sin depender del evento DOMContentLoaded)
         async function inicializarApp() {
