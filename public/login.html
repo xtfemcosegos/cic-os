@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso Operativo | CIC-OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        * {
+            font-family: 'Open Sans', sans-serif;
+        }
+    </style>
+
+    <script type="module">
+        import { firebaseConfig, initializeApp, getAuth, signInWithEmailAndPassword, getDatabase, ref, get } from "./config.js";
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // Función auxiliar para mostrar errores de forma visual (reemplazo de alert)
+        function showErrorMessage(message) {
+            const errorBox = document.getElementById('error-box');
+            const errorText = document.getElementById('error-text');
+            errorText.innerText = message;
+            errorBox.classList.remove('hidden');
+            errorBox.classList.add('flex');
+        }
+
+        // Función para ocultar el cuadro de error activo
+        window.dismissError = () => {
+            const errorBox = document.getElementById('error-box');
+            errorBox.classList.add('hidden');
+            errorBox.classList.remove('flex');
+        };
+
+        window.handleLogin = async (e) => {
+            e.preventDefault();
+            window.dismissError();
+            
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('pass').value;
+            const submitBtn = document.getElementById('submit-btn');
+            const btnText = document.getElementById('btn-text');
+            const btnSpinner = document.getElementById('btn-spinner');
+
+            // Feedback visual de carga
+            submitBtn.disabled = true;
+            btnText.innerText = "Autenticando...";
+            btnSpinner.classList.remove('hidden');
+
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+                const uid = userCredential.user.uid;
+                
+                // Obtener módulo asignado desde la RTDB
+                const moduloRef = ref(db, `usuarios/${uid}/modulo`);
+                const snapshot = await get(moduloRef);
+                
+                if (snapshot.exists()) {
+                    const modulo = snapshot.val();
+                    const finalModuleRoute = `mods/${modulo}.html`;
+
+                    // Guardamos la persistencia local para que el Index recupere este estado y ruta exactos
+                    localStorage.setItem('cicos_active_env', 'module');
+                    localStorage.setItem('cicos_module_src', finalModuleRoute);
+                    
+                    // Notificar al Index (Ventana Padre) si estamos en un Iframe
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            action: 'login_success',
+                            targetModule: finalModuleRoute
+                        }, '*');
+                    } else {
+                        // Si se abre de forma directa e independiente, redirigir al index maestro
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    showErrorMessage("Error de permisos: No se encontró un módulo operativo asignado para este perfil.");
+                    resetLoginButton();
+                }
+            } catch (error) {
+                let formattedError = "Ocurrió un error al intentar iniciar sesión.";
+                if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+                    formattedError = "Credenciales incorrectas. Verifique el correo o contraseña.";
+                } else if (error.code === 'auth/network-request-failed') {
+                    formattedError = "Error de red. Verifique su conexión a internet.";
+                } else {
+                    formattedError = error.message;
+                }
+                showErrorMessage(formattedError);
+                resetLoginButton();
+            }
+        };
+
+        function resetLoginButton() {
+            const submitBtn = document.getElementById('submit-btn');
+            const btnText = document.getElementById('btn-text');
+            const btnSpinner = document.getElementById('btn-spinner');
+            submitBtn.disabled = false;
+            btnText.innerText = "Ingresar al Módulo";
+            btnSpinner.classList.add('hidden');
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-stone-900 via-red-950 to-stone-900 min-h-screen flex items-center justify-center p-4 selection:bg-red-800 selection:text-white">
+
+    <div class="bg-white/95 backdrop-blur-sm p-8 rounded-2xl shadow-2xl w-full max-w-md border-[0.5px] border-red-800/20">
+        
+        <!-- Logo o Icono Decorativo -->
+        <div class="flex flex-col items-center mb-6">
+            <div class="w-16 h-16 bg-red-800/10 rounded-2xl flex items-center justify-center mb-3 border border-red-800/20">
+                <i class="fa-solid fa-shield-halved text-red-800 text-3xl"></i>
+            </div>
+            <h2 class="text-2xl font-black text-stone-900 tracking-tight text-center">Consola de Autenticación</h2>
+            <p class="text-xs font-bold text-stone-500 uppercase tracking-wider mt-1">Plataforma Operativa CIC-OS</p>
+        </div>
+
+        <!-- Contenedor Dinámico para Mensajes de Error (Sustituto de alert) -->
+        <div id="error-box" class="hidden bg-red-50 border-l-4 border-red-700 p-4 rounded-r-xl mb-5 flex-row justify-between items-start transition-all animate-fade-in">
+            <div class="flex gap-2">
+                <i class="fa-solid fa-triangle-exclamation text-red-700 mt-0.5"></i>
+                <div>
+                    <h4 class="text-xs font-black text-red-900 uppercase tracking-wide">Error de Acceso</h4>
+                    <p id="error-text" class="text-xs text-red-800 font-medium mt-1 leading-relaxed">Mensaje de error.</p>
+                </div>
+            </div>
+            <button onclick="dismissError()" class="text-red-700 hover:text-red-900 transition-colors ml-2">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Formulario de Acceso -->
+        <form onsubmit="handleLogin(event)" class="space-y-5">
+            <div>
+                <label class="block text-xs font-black text-stone-700 uppercase tracking-wider mb-2">Correo Electrónico</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-stone-400">
+                        <i class="fa-solid fa-envelope"></i>
+                    </span>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        required 
+                        placeholder="usuario@dominio.com" 
+                        class="w-full bg-stone-50 border border-stone-200 pl-10 pr-3 py-3 rounded-xl focus:ring-2 focus:ring-red-800/20 focus:border-red-800 outline-none transition-all text-sm text-stone-900 font-semibold"
+                    >
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-black text-stone-700 uppercase tracking-wider mb-2">Contraseña de Red</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-stone-400">
+                        <i class="fa-solid fa-lock"></i>
+                    </span>
+                    <input 
+                        type="password" 
+                        id="pass" 
+                        required 
+                        placeholder="••••••••••••" 
+                        class="w-full bg-stone-50 border border-stone-200 pl-10 pr-3 py-3 rounded-xl focus:ring-2 focus:ring-red-800/20 focus:border-red-800 outline-none transition-all text-sm text-stone-900 font-semibold"
+                    >
+                </div>
+            </div>
+
+            <!-- Botón de Envío -->
+            <button 
+                type="submit" 
+                id="submit-btn" 
+                class="w-full bg-red-800 hover:bg-red-900 text-white py-3.5 rounded-xl font-bold transition duration-300 flex items-center justify-center gap-2 border-[0.5px] border-red-950/20 shadow-md hover:shadow-lg active:scale-[0.98]"
+            >
+                <i id="btn-spinner" class="fa-solid fa-circle-notch animate-spin hidden"></i>
+                <span id="btn-text">Ingresar al Módulo</span>
+            </button>
+        </form>
+
+        <div class="mt-6 text-center">
+            <a href="javascript:void(0)" onclick="if (window.parent && window.parent !== window) { window.parent.postMessage({action: 'go_to_public'}, '*'); } else { window.location.href = 'index.html'; }" class="text-xs font-bold text-red-800 hover:text-red-950 transition-colors uppercase tracking-wider">
+                <i class="fa-solid fa-arrow-left mr-1"></i> Volver al Portal Público
+            </a>
+        </div>
+    </div>
+
+</body>
+</html>

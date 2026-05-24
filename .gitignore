@@ -1,0 +1,6 @@
+# Archivos basura del sistema
+.DS_Store
+Thumbs.db
+
+# Configuraciones de VS Code
+.vscode/

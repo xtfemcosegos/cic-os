@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full w-full overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal CIC-OS | Consola Maestra</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="manifest.json">
+    
+    <meta name="theme-color" content="#7f1d1d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="ico/icon-192.png">
+    
+    <style>
+        /* Desactivar márgenes, paddings y barras de scroll a nivel raíz */
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            height: 100%; 
+            width: 100%; 
+            overflow: hidden; 
+            background-color: #1c1917; /* Fondo neutro de carga */
+        }
+        /* Clase para forzar la inmersión total en pantalla completa */
+        .fullscreen-env {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+        }
+    </style>
+</head>
+<body class="h-full w-full relative">
+
+    <!-- Contenedor del Portal Público -->
+    <div id="env-public" class="fullscreen-env z-10 block">
+        <iframe 
+            id="frame-public" 
+            src="public_home.html" 
+            class="w-full h-full border-none"
+            allow="geolocation; microphone; camera;">
+        </iframe>
+    </div>
+
+    <!-- Contenedor del Login -->
+    <div id="env-login" class="fullscreen-env z-10 hidden">
+        <iframe 
+            id="frame-login" 
+            src="login.html" 
+            class="w-full h-full border-none">
+        </iframe>
+    </div>
+
+    <!-- Contenedor del Módulo Operativo Activo (CCO / Aplicaciones) -->
+    <div id="env-module" class="fullscreen-env z-10 hidden">
+        <iframe 
+            id="frame-module" 
+            src="mods/cco.html" 
+            class="w-full h-full border-none"
+            allow="geolocation; microphone; camera; display-capture;"
+            allowfullscreen>
+        </iframe>
+    </div>
+
+    <script>
+        /**
+         * Maneja de forma estricta la visibilidad de las capas sin recargarlas.
+         * Guarda de manera activa el estado actual del entorno en LocalStorage.
+         * @param {string} targetEnv - Puede ser 'public', 'login' o 'module'
+         */
+        function switchEnvironment(targetEnv) {
+            const environments = ['public', 'login', 'module'];
+            
+            environments.forEach(env => {
+                const element = document.getElementById(`env-${env}`);
+                if (env === targetEnv) {
+                    element.classList.remove('hidden');
+                    element.classList.add('block');
+                } else {
+                    element.classList.remove('block');
+                    element.classList.add('hidden');
+                }
+            });
+
+            // PERSISTENCIA: Registramos el entorno activo actual
+            localStorage.setItem('cicos_active_env', targetEnv);
+
+            // SEGURIDAD: Si salimos del módulo, reseteamos la ruta guardada
+            // para obligar a una recarga limpia y prevenir accesos indebidos en el siguiente login.
+            if (targetEnv !== 'module') {
+                localStorage.removeItem('cicos_module_src');
+            }
+        }
+
+        // OYENTE GLOBAL: Escucha instrucciones de redirección interna enviadas por los iframes hijos
+        window.addEventListener('message', function(event) {
+            if (!event.data) return;
+
+            // 1. Comando enviado desde el Portal Público o CCO para ir al Login
+            if (event.data.action === 'go_to_login') {
+                switchEnvironment('login');
+            }
+
+            // 2. Comando enviado desde el Login o CCO para ir al Portal Público
+            if (event.data.action === 'go_to_public') {
+                switchEnvironment('public');
+            }
+
+            // 3. Comando enviado desde login.html tras validar credenciales con éxito
+            if (event.data.action === 'login_success') {
+                if (event.data.targetModule) {
+                    document.getElementById('frame-module').src = event.data.targetModule;
+                    // PERSISTENCIA: Almacenamos la ruta dinámica del módulo seleccionado
+                    localStorage.setItem('cicos_module_src', event.data.targetModule);
+                }
+                switchEnvironment('module');
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // PROTECCIÓN DE REDIRECCIÓN Y SESIÓN CERRADA:
+            // Si el iframe hijo nos redireccionó aquí porque no había sesión, o detectamos parámetros de logout/expiración:
+            const isLogoutParam = urlParams.get('action') === 'logout' || urlParams.get('session') === 'expired' || window.location.hash === '#logout';
+            const isReferrerFromInside = document.referrer && (document.referrer.includes('/mods/') || document.referrer.includes('login.html'));
+
+            if (isLogoutParam || isReferrerFromInside) {
+                // Reescribimos y limpiamos de inmediato para forzar el estado público
+                localStorage.setItem('cicos_active_env', 'public');
+                localStorage.removeItem('cicos_module_src');
+            }
+
+            const lastEnv = localStorage.getItem('cicos_active_env');
+            const lastModuleSrc = localStorage.getItem('cicos_module_src');
+
+            // Recuperación del estado del entorno persistido
+            if (lastEnv === 'module') {
+                if (lastModuleSrc) {
+                    document.getElementById('frame-module').src = lastModuleSrc;
+                }
+                switchEnvironment('module');
+            } else if (lastEnv === 'login') {
+                switchEnvironment('login');
+            } else {
+                // Estado por defecto inicial
+                switchEnvironment('public');
+            }
+        });
+    
+        // Registrar el Service Worker si el navegador es compatible
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker registrado con éxito', reg))
+                    .catch(err => console.error('Error al registrar el Service Worker', err));
+            });
+        }
+    </script>
+</body>
+</html>

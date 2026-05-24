@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convertidor y Redimensionador de Imágenes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Open Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-stone-100 text-stone-900 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-md border-[0.5px] border-stone-200 overflow-hidden">
+        
+        <div class="bg-gradient-to-r from-red-900 to-red-800 p-6 text-white">
+            <h1 class="text-2xl font-bold uppercase tracking-wide flex items-center gap-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                Procesador de Imágenes Táctico
+            </h1>
+            <p class="text-xs text-red-200 mt-1 uppercase tracking-wider">Conversión de Formatos y Ajuste de Dimensiones Local (PWA Ready)</p>
+        </div>
+
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Seleccionar Imagen</label>
+                    <div class="border-2 border-dashed border-stone-300 rounded-lg p-6 text-center hover:border-red-800 transition-colors bg-stone-50 relative cursor-pointer">
+                        <input type="file" id="image-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                        <div id="upload-prompt" class="space-y-1 text-stone-600">
+                            <svg class="w-10 h-10 mx-auto text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                            <p class="text-sm font-semibold">Haz clic o arrastra un archivo aquí</p>
+                            <p class="text-xs text-stone-400">Soporta PNG, JPG, WEBP, BMP, ICO, etc.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-stone-50 p-4 rounded-lg border-[0.5px] border-stone-200 space-y-4">
+                    <h3 class="text-xs font-bold text-stone-700 uppercase tracking-wider border-b pb-2 flex justify-between items-center">
+                        <span>1. Cambiar Tamaño (Opcional)</span>
+                        <button onclick="setPreset(192, 192)" class="text-[10px] text-red-800 hover:underline">Preset 192px</button>
+                        <button onclick="setPreset(512, 512)" class="text-[10px] text-red-800 hover:underline">Preset 512px</button>
+                    </h3>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[11px] font-bold text-stone-500 mb-1">Ancho (px)</label>
+                            <input type="number" id="input-width" class="w-full bg-white border border-stone-300 rounded p-2 text-sm focus:outline-none focus:border-red-800" placeholder="Original">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-stone-500 mb-1">Alto (px)</label>
+                            <input type="number" id="input-height" class="w-full bg-white border border-stone-300 rounded p-2 text-sm focus:outline-none focus:border-red-800" placeholder="Original">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="maintain-aspect" checked class="w-4 h-4 accent-red-800">
+                        <label for="maintain-aspect" class="text-xs text-stone-600 font-medium select-none">Mantener relación de aspecto</label>
+                    </div>
+                </div>
+
+                <div class="bg-stone-50 p-4 rounded-lg border-[0.5px] border-stone-200 space-y-3">
+                    <h3 class="text-xs font-bold text-stone-700 uppercase tracking-wider border-b pb-2">2. Formato de Salida</h3>
+                    <div class="bg-stone-50 p-4 rounded-lg border-[0.5px] border-stone-200 space-y-3 mt-4">
+                    <div>
+                        <select id="output-format" class="w-full bg-white border border-stone-300 rounded p-2 text-sm focus:outline-none focus:border-red-800 font-semibold">
+                            <option value="image/png">PNG (.png) - Recomendado para PWAs</option>
+                            <option value="image/jpeg">JPEG (.jpg)</option>
+                            <option value="image/webp">WEBP (.webp) - Alta Compresión</option>
+                            <option value="image/x-icon">ICO (.ico) - Favicon Tradicional</option>
+                        </select>
+                    </div>
+                    <div id="quality-container" class="hidden space-y-1">
+                        <div class="flex justify-between text-xs font-bold text-stone-500">
+                            <label>Calidad de compresión</label>
+                            <span id="quality-val">80%</span>
+                        </div>
+                        <input type="range" id="output-quality" min="1" max="100" value="80" class="w-full accent-red-800">
+                    </div>
+                </div>
+                 <h3 class="text-xs font-bold text-stone-700 uppercase tracking-wider border-b pb-2">3. Nomenclatura y Destino</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[11px] font-bold text-stone-500 mb-1">Nombre del Archivo</label>
+                            <input type="text" id="output-filename" class="w-full bg-white border border-stone-300 rounded p-2 text-sm focus:outline-none focus:border-red-800 font-mono" placeholder="cicos_procesada">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-stone-500 mb-1">Ruta de Destino Virtual</label>
+                            <input type="text" id="output-path" class="w-full bg-white border border-stone-300 rounded p-2 text-sm focus:outline-none focus:border-red-800 font-mono" placeholder="ico/">
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-stone-400 italic">Nota: Por motivos de seguridad del navegador, la ruta se integrará al nombre para mantener el orden en tu carpeta de descargas.</p>
+                </div>
+                <button onclick="processImage()" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-3 rounded-lg text-sm uppercase tracking-wider transition shadow-sm">
+                    Procesar y Descargar
+                </button>
+            </div>
+
+            <div class="border-[0.5px] border-stone-200 rounded-lg p-4 bg-stone-50/50 flex flex-col justify-between min-h-[300px]">
+                <div>
+                    <h3 class="text-xs font-bold text-stone-500 uppercase tracking-wider mb-3">Vista Previa del Archivo</h3>
+                    <div class="w-full h-64 border border-stone-200 rounded-lg bg-stone-100 flex items-center justify-center overflow-hidden p-2 relative">
+                        <img id="preview-img" class="max-w-full max-h-full object-contain hidden" alt="Vista previa">
+                        <div id="preview-placeholder" class="text-center text-xs text-stone-400">
+                            <i class="fa-solid fa-image text-3xl mb-1 block"></i>
+                            Ningún archivo cargado
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 bg-white p-3 rounded border-[0.5px] border-stone-200 text-xs space-y-1.5 font-mono">
+                    <div class="flex justify-between"><span class="text-stone-400">Nombre:</span> <span id="meta-name" class="font-bold text-stone-700 truncate max-w-[200px]">-</span></div>
+                    <div class="flex justify-between"><span class="text-stone-400">Tipo original:</span> <span id="meta-type" class="text-stone-700">-</span></div>
+                    <div class="flex justify-between"><span class="text-stone-400">Dimensión original:</span> <span id="meta-dims" class="text-stone-700">-</span></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let originalImage = null;
+        let aspectRatio = 1;
+
+        const imageInput = document.getElementById('image-input');
+        const previewImg = document.getElementById('preview-img');
+        const previewPlaceholder = document.getElementById('preview-placeholder');
+        const uploadPrompt = document.getElementById('upload-prompt');
+        
+        const inputWidth = document.getElementById('input-width');
+        const inputHeight = document.getElementById('input-height');
+        const maintainAspect = document.getElementById('maintain-aspect');
+        const outputFormat = document.getElementById('output-format');
+        const qualityContainer = document.getElementById('quality-container');
+        const outputQuality = document.getElementById('output-quality');
+        const qualityVal = document.getElementById('quality-val');
+
+        // Escucha de carga de archivo
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Mostrar metadatos iniciales
+            document.getElementById('meta-name').innerText = file.name;
+            document.getElementById('meta-type').innerText = file.type || 'Desconocido';
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                originalImage = new Image();
+                originalImage.onload = function() {
+                    // Guardar dimensiones y relación de aspecto originales
+                    aspectRatio = originalImage.width / originalImage.height;
+                    document.getElementById('meta-dims').innerText = `${originalImage.width} x ${originalImage.height} px`;
+                    
+                    inputWidth.value = originalImage.width;
+                    inputHeight.value = originalImage.height;
+
+                    // Mostrar en área de vista previa
+                    previewImg.src = event.target.result;
+                    previewImg.classList.remove('hidden');
+                    previewPlaceholder.classList.add('hidden');
+                };
+                originalImage.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Control dinámico de campos de dimensiones basados en el aspecto
+        inputWidth.addEventListener('input', function() {
+            if (maintainAspect.checked && originalImage && inputWidth.value) {
+                inputHeight.value = Math.round(inputWidth.value / aspectRatio);
+            }
+        });
+
+        inputHeight.addEventListener('input', function() {
+            if (maintainAspect.checked && originalImage && inputHeight.value) {
+                inputWidth.value = Math.round(inputHeight.value * aspectRatio);
+            }
+        });
+
+        // Mostrar control de calidad solo si se selecciona JPEG o WEBP
+        outputFormat.addEventListener('change', function() {
+            if (outputFormat.value === 'image/jpeg' || outputFormat.value === 'image/webp') {
+                qualityContainer.classList.remove('hidden');
+            } else {
+                qualityContainer.classList.add('hidden');
+            }
+        });
+
+        outputQuality.addEventListener('input', function() {
+            qualityVal.innerText = `${outputQuality.value}%`;
+        });
+
+        // Permitir asignación rápida mediante botones preset (ideal para iconos de PWA de 192px / 512px)
+        window.setPreset = (w, h) => {
+            inputWidth.value = w;
+            inputHeight.value = h;
+            maintainAspect.checked = false; // Desactivar temporalmente para forzar dimensiones cuadradas de PWA
+        };
+
+        // Procesamiento e inyección en Canvas para conversión y descarga
+        window.processImage = () => {
+            if (!originalImage) {
+                alert("Por favor, selecciona una imagen primero.");
+                return;
+            }
+
+            const w = parseInt(inputWidth.value) || originalImage.width;
+            const h = parseInt(inputHeight.value) || originalImage.height;
+
+            // Crear un elemento canvas virtual en memoria
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+
+            // Dibujar y escalar la imagen dentro del lienzo virtual
+            ctx.drawImage(originalImage, 0, 0, w, h);
+
+            // Obtener el formato seleccionado y la calidad
+            const format = outputFormat.value;
+            const quality = parseInt(outputQuality.value) / 100;
+
+            // Generar binario/enlace de descarga
+            const dataUrl = canvas.toDataURL(format, quality);
+            
+            // Determinar extensión de archivo correspondiente
+            let extension = '.png';
+            if (format === 'image/jpeg') extension = '.jpg';
+            if (format === 'image/webp') extension = '.webp';
+            if (format === 'image/x-icon') extension = '.ico';
+
+            // Crear disparador de descarga automático en el navegador
+
+            // Obtener los nuevos parámetros del DOM
+            const customName = document.getElementById('output-filename').value.trim();
+            const customPath = document.getElementById('output-path').value.trim();
+
+            // Definir el nombre base predeterminado si el usuario deja el campo vacío
+            let baseName = customName ? customName : `cicos_procesada_${w}x${h}`;
+
+            // Sanitizar y estructurar la ruta si fue ingresada
+            if (customPath) {
+                // Asegurar que termine en diagonal o guion para que no se pegue con el nombre
+                const sanitizedPath = customPath.endsWith('/') ? customPath.replace(/\//g, '_') : `${customPath}_`;
+                baseName = `${sanitizedPath}${baseName}`;
+            }
+
+            // Crear disparador de descarga automático en el navegador con la nueva nomenclatura
+            const downloadLink = document.createElement('a');
+            downloadLink.href = dataUrl;
+            downloadLink.download = `${baseName}${extension}`; // Ej: ico_icon-192.png
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        };
+    </script>
+</body>
+</html>

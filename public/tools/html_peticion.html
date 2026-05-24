@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Firebase Test Tool</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; max-width: 600px; }
+        input, select, textarea, button { display: block; width: 100%; margin: 10px 0; padding: 10px; }
+        #response { background: #eee; padding: 15px; white-space: pre-wrap; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h3>Prueba de Escritura: marbetes.firebaseio.com</h3>
+    
+    <select id="method">
+        <option value="PATCH">PATCH (Actualizar)</option>
+        <option value="PUT">PUT (Reemplazar)</option>
+    </select>
+
+    <input type="text" id="url" value="https://marbetes.firebaseio.com/test.json" placeholder="URL">
+    <input type="text" id="token" placeholder="Token de autenticación (opcional)">
+    
+    <textarea id="body" rows="4">{"ejemplo": "dato de prueba", "fecha": "2026-05-21"}</textarea>
+    
+    <button onclick="enviar()">Enviar a Firebase</button>
+
+    <h4>Respuesta:</h4>
+    <div id="response">Esperando...</div>
+
+    <script>
+        async function enviar() {
+            let url = document.getElementById('url').value;
+            const token = document.getElementById('token').value;
+            const method = document.getElementById('method').value;
+            const body = document.getElementById('body').value;
+            const responseDiv = document.getElementById('response');
+
+            // Añadir token si existe
+            if (token) url += `?auth=${token}`;
+
+            try {
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+                const data = await res.json();
+                responseDiv.innerText = JSON.stringify(data, null, 2);
+            } catch (err) {
+                responseDiv.innerText = "Error: " + err.message;
+            }
+        }
+    </script>
+</body>
+</html>

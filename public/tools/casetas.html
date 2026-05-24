@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIC-OS - Extractor de Casetas</title>
+    <!-- Tailwind CSS para estilizado premium -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Urbanist para un look tecnológico sofisticado -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Urbanist', sans-serif;
+            background-color: #0B0F19;
+            color: #F3F4F6;
+        }
+        /* Personalización de barra de scroll interna */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 3px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: #4B5563;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex flex-col justify-start items-center">
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <div class="w-full max-w-4xl bg-gray-900/40 border border-gray-800 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-2xl">
+        
+        <!-- Cabecera de la herramienta -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-800 pb-6 mb-6 gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-xl bg-indigo-600/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                    <i class="fa-solid fa-database text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white">Extractor de Casetas</h1>
+                    <p class="text-xs text-gray-400 font-medium">Lector de IndexedDB de producción para <span class="text-indigo-400">cic-os</span></p>
+                </div>
+            </div>
+            
+            <!-- Estado de conexión -->
+            <div id="estado-db" class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-semibold self-start md:self-auto">
+                <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                Inactivo / Sin leer
+            </div>
+        </header>
+
+        <!-- GRID DE ACCIÓN -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+            
+            <!-- Columna Izquierda: Controles y Estado -->
+            <div class="md:col-span-5 flex flex-col gap-4">
+                <div class="bg-gray-950/60 border border-gray-800/80 rounded-xl p-5">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-indigo-400"></i> Acciones del Sistema
+                    </h2>
+                    
+                    <div class="flex flex-col gap-3">
+                        <!-- Botón de extracción -->
+                        <button onclick="ejecutarExtraccion()" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20">
+                            <i class="fa-solid fa-sync-alt" id="icono-extrar"></i>
+                            Escanear Base de Datos
+                        </button>
+                        
+                        <!-- Copiar Resultados -->
+                        <button id="btn-copiar" onclick="copiarNombres()" disabled class="w-full py-2.5 px-4 bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white font-semibold rounded-lg border border-gray-700/60 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-copy"></i>
+                            Copiar al Portapapeles
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bloque de Test (Inyector de datos para pruebas locales) -->
+                <div class="bg-indigo-950/20 border border-indigo-900/30 rounded-xl p-5">
+                    <h3 class="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">¿Base de datos vacía?</h3>
+                    <p class="text-xs text-gray-400 leading-relaxed mb-4">
+                        Si aún no has guardado registros en la aplicación principal, puedes inyectar de forma segura 3 casetas de prueba para evaluar la extracción.
+                    </p>
+                    <button onclick="inyectarCasetasPrueba()" class="w-full py-2 px-3 bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/25 hover:border-indigo-500/40 text-indigo-300 font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-magic-wand-sparkles"></i>
+                        Inyectar Casetas de Prueba
+                    </button>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Resultado del escaneo -->
+            <div class="md:col-span-7 flex flex-col">
+                <div class="flex-1 bg-gray-950/80 border border-gray-800 rounded-xl p-5 flex flex-col h-[320px]">
+                    <div class="flex items-center justify-between mb-3 border-b border-gray-800/80 pb-2">
+                        <h2 class="text-sm font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-emerald-400"></i> Casetas Extraídas
+                        </h2>
+                        <span id="contador-casetas" class="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">0 Encontradas</span>
+                    </div>
+
+                    <!-- Lista de casetas -->
+                    <div id="lista-casetas" class="flex-1 overflow-y-auto custom-scroll flex flex-col gap-2 pr-1 justify-center items-center text-gray-500">
+                        <div class="text-center p-4">
+                            <i class="fa-solid fa-search text-3xl text-gray-700 mb-2"></i>
+                            <p class="text-sm">Presiona "Escanear Base de Datos" para iniciar la búsqueda en IndexedDB.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- SECCIÓN DE CÓDIGO DE PRODUCCIÓN -->
+        <section class="mt-8 border-t border-gray-800 pt-6">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2">
+                    <i class="fa-solid fa-code text-indigo-400"></i> Función JavaScript Integrable
+                </h2>
+                <button onclick="copiarCodigo()" class="text-xs text-indigo-400 hover:text-indigo-300 font-bold transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-clone"></i> Copiar Código
+                </button>
+            </div>
+            
+            <div class="relative bg-gray-950 rounded-xl border border-gray-800 p-4 overflow-x-auto">
+                <pre class="text-[11px] md:text-xs text-gray-300 font-mono leading-relaxed" id="bloque-codigo"><code>/**
+ * Extrae de forma segura la lista de todos los nombres de casetas
+ * desde la base de datos IndexedDB 'cic-os' -> almacen 'casetas'.
+ * 
+ * @returns {Promise&lt;string[]&gt;} Promesa que resuelve con el array de nombres de casetas.
+ */
+function extraerNombresDeCasetas() {
+    return new Promise((resolve, reject) => {
+        // Abrimos la base de datos sin forzar versión para usar la activa
+        const solicitud = indexedDB.open("cic-os");
+
+        solicitud.onerror = (evento) => {
+            reject("Error al conectar con IndexedDB: " + evento.target.error.message);
+        };
+
+        solicitud.onsuccess = (evento) => {
+            const db = evento.target.result;
+
+            // Validamos existencia del almacén solicitado
+            if (!db.objectStoreNames.contains("casetas")) {
+                db.close();
+                reject("El almacén 'casetas' no existe en la base de datos.");
+                return;
+            }
+
+            const transaccion = db.transaction("casetas", "readonly");
+            const almacen = transaccion.objectStore("casetas");
+            
+            // Dado que las casetas usan el 'nombre' como clave única, extraemos todas las llaves primarias
+            const solicitudLlaves = almacen.getAllKeys();
+
+            solicitudLlaves.onsuccess = (e) => {
+                const nombres = e.target.result;
+                db.close();
+                resolve(nombres); // Retorna array de strings (ej: ["Caseta Norte", "Caseta Sur"])
+            };
+
+            solicitudLlaves.onerror = (e) => {
+                db.close();
+                reject("Error de lectura en almacén: " + e.target.error.message);
+            };
+        };
+    });
+}</code></pre>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- TOAST PARA NOTIFICACIONES PERSONALIZADAS -->
+    <div id="toast-notificacion" class="fixed bottom-6 right-6 px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 shadow-2xl flex items-center gap-3 translate-y-24 opacity-0 transition-all duration-300 z-50">
+        <div id="toast-icono" class="w-8 h-8 rounded-lg flex items-center justify-center text-white"></div>
+        <div class="text-xs">
+            <p id="toast-titulo" class="font-bold text-white"></p>
+            <p id="toast-mensaje" class="text-gray-400 mt-0.5"></p>
+        </div>
+    </div>
+
+    <!-- SISTEMA DE JAVASCRIPT DE DIAGNÓSTICO -->
+    <script>
+        
+        // Array global para almacenar temporalmente los nombres extraídos
+        let nombresCasetasExtraidos = [];
+
+        /**
+         * Lanza un mensaje Toast estilizado en el DOM de manera segura.
+         */
+        function mostrarToast(titulo, mensaje, tipo = 'exito') {
+            const toast = document.getElementById('toast-notificacion');
+            const iconoContenedor = document.getElementById('toast-icono');
+            const txtTitulo = document.getElementById('toast-titulo');
+            const txtMensaje = document.getElementById('toast-mensaje');
+
+            txtTitulo.textContent = titulo;
+            txtMensaje.textContent = mensaje;
+
+            if (tipo === 'exito') {
+                iconoContenedor.className = "w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center";
+                iconoContenedor.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+            } else if (tipo === 'info') {
+                iconoContenedor.className = "w-8 h-8 rounded-lg bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center";
+                iconoContenedor.innerHTML = '<i class="fa-solid fa-info-circle"></i>';
+            } else {
+                iconoContenedor.className = "w-8 h-8 rounded-lg bg-rose-600/10 border border-rose-500/20 text-rose-400 flex items-center justify-center";
+                iconoContenedor.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+            }
+
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-24', 'opacity-0');
+            }, 3500);
+        }
+
+        /**
+         * Función promotora principal que extrae la información desde IndexedDB.
+         */
+        function ejecutarExtraccion() {
+            const icono = document.getElementById('icono-extrar');
+            const divEstado = document.getElementById('estado-db');
+            const lista = document.getElementById('lista-casetas');
+            const contador = document.getElementById('contador-casetas');
+            const btnCopiar = document.getElementById('btn-copiar');
+
+            // Efecto visual de rotación en el icono de escaneo
+            icono.classList.add('animate-spin');
+
+            // Abrimos la DB "cic-os"
+            const peticion = indexedDB.open("cic-os");
+
+            peticion.onerror = (e) => {
+                icono.classList.remove('animate-spin');
+                divEstado.className = "flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold self-start md:self-auto";
+                divEstado.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span> Error de conexión';
+                
+                lista.innerHTML = `
+                    <div class="text-center p-4">
+                        <i class="fa-solid fa-database text-3xl text-rose-500 mb-2"></i>
+                        <p class="text-sm font-semibold text-rose-300">No se pudo conectar a 'cic-os'</p>
+                        <p class="text-xs text-gray-500 mt-1">Asegúrate de haber guardado registros o creado la base de datos.</p>
+                    </div>
+                `;
+                mostrarToast("Error de Acceso", "No se encontró o no se pudo leer la base de datos 'cic-os'.", "error");
+            };
+
+            peticion.onsuccess = (e) => {
+                const db = e.target.result;
+
+                // Verificamos si existe el almacén 'casetas'
+                if (!db.objectStoreNames.contains("casetas")) {
+                    icono.classList.remove('animate-spin');
+                    divEstado.className = "flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold self-start md:self-auto";
+                    divEstado.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Almacén no encontrado';
+                    
+                    lista.innerHTML = `
+                        <div class="text-center p-4">
+                            <i class="fa-solid fa-folder-open text-3xl text-amber-500 mb-2"></i>
+                            <p class="text-sm font-semibold text-amber-300">Almacén 'casetas' no existe</p>
+                            <p class="text-xs text-gray-500 mt-1">Usa el inyector de abajo para crear el almacén y registros de prueba.</p>
+                        </div>
+                    `;
+                    db.close();
+                    mostrarToast("Almacén Vacío", "La base de datos existe pero no tiene el almacén 'casetas'.", "error");
+                    return;
+                }
+
+                const transaccion = db.transaction("casetas", "readonly");
+                const almacen = transaccion.objectStore("casetas");
+                const peticionLlaves = almacen.getAllKeys();
+
+                peticionLlaves.onsuccess = (eventoLlaves) => {
+                    const llaves = eventoLlaves.target.result;
+                    nombresCasetasExtraidos = llaves;
+
+                    icono.classList.remove('animate-spin');
+                    
+                    // Actualizar cabecera de estado
+                    divEstado.className = "flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold self-start md:self-auto";
+                    divEstado.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lectura Completada';
+                    
+                    // Actualizar contador
+                    contador.textContent = `${llaves.length} Encontradas`;
+                    contador.className = "text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full";
+
+                    if (llaves.length === 0) {
+                        lista.innerHTML = `
+                            <div class="text-center p-4">
+                                <i class="fa-solid fa-clipboard-list text-3xl text-gray-600 mb-2"></i>
+                                <p class="text-sm font-semibold text-gray-400">Sin casetas registradas</p>
+                                <p class="text-xs text-gray-500 mt-1">El almacén de datos está inicializado pero no tiene registros.</p>
+                            </div>
+                        `;
+                        btnCopiar.disabled = true;
+                        mostrarToast("Escaneo Listo", "Base de datos leída, pero el almacén de casetas está vacío.", "info");
+                    } else {
+                        btnCopiar.disabled = false;
+                        lista.innerHTML = "";
+                        lista.classList.remove('justify-center', 'items-center');
+                        lista.classList.add('justify-start');
+
+                        // Renderizar las llaves (nombres de casetas) en la lista
+                        llaves.forEach((llave, indice) => {
+                            const item = document.createElement('div');
+                            item.className = "w-full py-3 px-4 bg-gray-900/80 border border-gray-800 hover:border-indigo-500/30 rounded-xl flex items-center justify-between transition-all group";
+                            item.innerHTML = `
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded">${indice + 1}</span>
+                                    <p class="text-sm font-bold text-gray-200 group-hover:text-indigo-200 transition-colors">${llave}</p>
+                                </div>
+                                <span class="text-[10px] uppercase font-bold tracking-widest text-emerald-400/80 bg-emerald-500/5 border border-emerald-500/15 px-2.5 py-1 rounded-full flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online
+                                </span>
+                            `;
+                            lista.appendChild(item);
+                        });
+                        mostrarToast("Escaneo Exitoso", `${llaves.length} casetas cargadas desde IndexedDB.`, "exito");
+                    }
+                    db.close();
+                };
+
+                peticionLlaves.onerror = () => {
+                    icono.classList.remove('animate-spin');
+                    db.close();
+                    mostrarToast("Error de Lectura", "Ocurrió un error al consultar las llaves del almacén.", "error");
+                };
+            };
+        }
+
+        /**
+         * Copia los nombres de las casetas al portapapeles.
+         * Utiliza document.execCommand('copy') como fallback seguro para evitar restricciones de iFrame.
+         */
+        function copiarNombres() {
+            if (nombresCasetasExtraidos.length === 0) return;
+
+            const textoA_Copiar = nombresCasetasExtraidos.join('\n');
+            
+            // Creamos un área de texto fantasma fuera de la vista para realizar el copiado seguro
+            const areaTemporal = document.createElement('textarea');
+            areaTemporal.value = textoA_Copiar;
+            areaTemporal.style.position = 'fixed';
+            areaTemporal.style.top = '0';
+            areaTemporal.style.left = '0';
+            areaTemporal.style.opacity = '0';
+            document.body.appendChild(areaTemporal);
+            
+            areaTemporal.focus();
+            areaTemporal.select();
+
+            try {
+                const exito = document.execCommand('copy');
+                if (exito) {
+                    mostrarToast("Copiado con Éxito", "Los nombres de las casetas se copiaron al portapapeles.", "exito");
+                } else {
+                    throw new Error("No permitido por el navegador");
+                }
+            } catch (err) {
+                mostrarToast("Error de Copiado", "Intente seleccionar y copiar manualmente.", "error");
+            } finally {
+                document.body.removeChild(areaTemporal);
+            }
+        }
+
+        /**
+         * Copia el bloque de código JavaScript de la pantalla para comodidad del desarrollador.
+         */
+        function copiarCodigo() {
+            const preElemento = document.getElementById('bloque-codigo');
+            const areaTemporal = document.createElement('textarea');
+            areaTemporal.value = preElemento.innerText;
+            areaTemporal.style.position = 'fixed';
+            areaTemporal.style.opacity = '0';
+            document.body.appendChild(areaTemporal);
+            areaTemporal.select();
+
+            try {
+                document.execCommand('copy');
+                mostrarToast("Código Copiado", "Código de integración copiado al portapapeles.", "exito");
+            } catch (err) {
+                mostrarToast("Error", "No se pudo copiar el código.", "error");
+            } finally {
+                document.body.removeChild(areaTemporal);
+            }
+        }
+
+        /**
+         * Crea casetas de prueba directamente en el almacén 'casetas' de 'cic-os' para poder validar la función.
+         * Utiliza de manera consistente la versión de esquema '5' de IndexedDB que definimos previamente.
+         */
+        function inyectarCasetasPrueba() {
+            // Abrimos/creamos en la versión 5
+            const peticion = indexedDB.open("cic-os", 5);
+
+            peticion.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                // Si el almacén 'casetas' no existía, lo creamos con el keyPath establecido en 'nombre'
+                if (!db.objectStoreNames.contains("casetas")) {
+                    db.createObjectStore("casetas", { keyPath: "nombre" });
+                }
+            };
+
+            peticion.onsuccess = (e) => {
+                const db = e.target.result;
+                const transaccion = db.transaction("casetas", "readwrite");
+                const almacen = transaccion.objectStore("casetas");
+
+                // Datos de prueba para simular casetas operativas reales
+                const casetasPrueba = [
+                    { nombre: "Caseta de Acceso Norte", ubicacion: "Sector Norte - Portón Principal" },
+                    { nombre: "Caseta de Embarques", ubicacion: "Sector Este - Zona de Carga" },
+                    { nombre: "Caseta de Administración", ubicacion: "Plaza Central - Edificio A" }
+                ];
+
+                casetasPrueba.forEach(caseta => {
+                    almacen.put(caseta);
+                });
+
+                transaccion.oncomplete = () => {
+                    db.close();
+                    mostrarToast("Inyección Lista", "Casetas de prueba inyectadas. Escanea de nuevo.", "exito");
+                    ejecutarExtraccion(); // Auto-escaneo para reflejar los resultados de inmediato
+                };
+
+                transaccion.onerror = () => {
+                    db.close();
+                    mostrarToast("Error de Inyección", "No se pudieron registrar las casetas de prueba.", "error");
+                };
+            };
+
+            peticion.onerror = () => {
+                mostrarToast("Error", "No se pudo abrir la base de datos para inyectar los datos de prueba.", "error");
+            };
+        }
+    </script>
+</body>
+</html>

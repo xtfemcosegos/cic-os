@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal CIC-OS | Gestión Operativa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .hidden-section { display: none; }
+    </style>
+</head>
+<body class="bg-red-50 text-gray-900 font-sans">
+
+    <!-- Navegación -->
+    <nav class="bg-red-900 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">CIC-OS Portal</h1>
+            <div>
+                <button onclick="showSection('home')" class="px-4 py-2 hover:bg-red-800 rounded">Inicio</button>
+                <button onclick="showSection('forms')" class="px-4 py-2 hover:bg-red-800 rounded">Formularios</button>
+                <a href="login.html" class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-full font-semibold transition">Módulo Operativo</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Contenido Principal -->
+    <main class="container mx-auto mt-10 p-6">
+        
+        <!-- Inicio -->
+        <section id="home" class="hidden-section block">
+            <div class="bg-white p-10 rounded-xl shadow-md text-center border-t-4 border-red-900">
+                <h2 class="text-4xl font-bold mb-4 text-red-900">Bienvenido a CIC-OS</h2>
+                <p class="text-gray-600 mb-6">Sistema operativo centralizado para la gestión eficiente de recursos y operaciones.</p>
+                <button onclick="showSection('forms')" class="bg-red-900 text-white px-8 py-3 rounded-lg hover:bg-red-800 transition">Explorar Módulos</button>
+            </div>
+        </section>
+
+        <!-- Formularios -->
+        <section id="forms" class="hidden-section">
+            <h2 class="text-3xl font-bold mb-6 text-red-900">Formularios de Registro</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-lg shadow border-l-4 border-red-900">
+                    <h3 class="text-xl font-semibold mb-4">Reporte de Incidencia</h3>
+                    <form onsubmit="handleForm(event)">
+                        <input type="text" placeholder="Asunto" class="w-full border p-2 mb-3 rounded focus:ring-2 focus:ring-red-900 outline-none">
+                        <textarea placeholder="Descripción" class="w-full border p-2 mb-3 rounded focus:ring-2 focus:ring-red-900 outline-none"></textarea>
+                        <button class="bg-red-900 text-white px-4 py-2 rounded hover:bg-red-800">Enviar Reporte</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function showSection(id) {
+            document.querySelectorAll('section').forEach(s => s.style.display = 'none');
+            document.getElementById(id).style.display = 'block';
+        }
+
+        function handleForm(e) {
+            e.preventDefault();
+            alert('Formulario enviado correctamente.');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full w-full m-0 p-0 overflow-hidden selection:bg-red-800/20">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIC-OS - Control Asistencia (RegAs)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Estilos optimizados para scrollbar táctico en el Sidebar */
+        .sidebar-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+            background: rgba(120, 113, 108, 0.2);
+            border-radius: 2px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(153, 27, 27, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-stone-100 text-stone-950 h-full w-full flex overflow-hidden relative m-0 p-0 select-none">
+
+    <!-- Disparador flotante (Modo Oculto) -->
+    <button onclick="toggleSidebarMode()" id="sidebar-trigger" class="hidden fixed bottom-6 left-6 bg-red-800 hover:bg-red-900 text-white w-12 h-12 rounded-xl shadow-2xl border-[0.5px] border-red-950/40 z-30 items-center justify-center transition-all duration-300 animate-bounce" title="Mostrar Menú">
+        <i class="fa-solid fa-bars text-base"></i>
+    </button>
+
+    <!-- Sidebar Táctico (Inicia en modo compacto: ancho w-16) -->
+    <aside id="tactical-sidebar" class="w-16 h-full bg-stone-50 border-r-[0.5px] border-stone-200 flex flex-col justify-between shrink-0 z-20 shadow-sm transition-all duration-300 ease-in-out overflow-hidden">
+        
+        <div class="flex flex-col overflow-hidden w-full">
+            
+            <!-- Cabecera en modo Expandido (Oculta por defecto) -->
+            <div id="sidebar-header" class="hidden p-4 border-b-[0.5px] border-stone-200/80 items-center justify-between bg-gradient-to-b from-stone-50 to-stone-100/50 w-full min-w-[256px]">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-red-900 flex items-center justify-center shadow-sm border-[0.5px] border-red-950/20 shrink-0">
+                        <i class="fa-solid fa-user-check text-white text-sm"></i>
+                    </div>
+                    <div id="header-text" style="display: none;">
+                        <h2 class="text-xs font-black text-stone-800 uppercase tracking-wider leading-none">Control Asistencia</h2>
+                        <span class="text-[10px] text-red-800 font-extrabold uppercase tracking-widest block mt-1">Módulo RegAs</span>
+                    </div>
+                </div>
+                <button onclick="toggleSidebarMode()" class="text-stone-400 hover:text-red-800 transition-colors p-1" title="Cambiar modo de menú">
+                    <i class="fa-solid fa-angles-left text-xs transition-transform duration-300 rotate-180" id="toggle-angle-icon"></i>
+                </button>
+            </div>
+
+            <!-- Cabecera en modo Compacto (Visible por defecto) -->
+            <div id="sidebar-compact-trigger" class="flex p-4 border-b-[0.5px] border-stone-200/80 text-center bg-stone-100/50 w-full justify-center">
+                <button onclick="toggleSidebarMode()" class="text-stone-500 hover:text-red-800 transition-colors p-1" title="Cambiar modo de menú">
+                    <i class="fa-solid fa-bars text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Menú de Navegación -->
+            <nav class="p-3 space-y-1 sidebar-scroll overflow-y-auto max-h-[calc(100vh-120px)] w-full">
+                
+                <!-- Botón Inicio (Icono corregido a fa-house y alineación centrada para modo compacto) -->
+                <button onclick="switchSection('inicio', '../secciones/apps/regas/inicio.html')" id="btn-inicio" class="nav-btn w-full p-2.5 rounded-lg flex items-center justify-center gap-3 text-left transition-all duration-150 bg-red-900/5 text-red-900 font-black text-xs uppercase tracking-wide border-[0.5px] border-red-800/15">
+                    <div class="w-5 h-5 flex items-center justify-center shrink-0"><i class="fa-solid fa-house text-sm"></i></div>
+                    <span class="truncate nav-label hidden">Inicio</span>
+                </button>
+
+                <button onclick="switchSection('planeacion', '../secciones/apps/regas/planeacion.html')" id="btn-planeacion" class="nav-btn w-full p-2.5 rounded-lg flex items-center justify-center gap-3 text-left transition-all duration-150 text-stone-600 hover:text-red-900 hover:bg-stone-100 font-semibold text-xs uppercase tracking-wide border-[0.5px] border-transparent">
+                    <div class="w-5 h-5 flex items-center justify-center shrink-0"><i class="fa-solid fa-calendar-check text-sm"></i></div>
+                    <span class="truncate nav-label hidden">Planeación</span>
+                </button>
+
+                <button onclick="switchSection('reportes', '../secciones/apps/regas/reportes.html')" id="btn-reportes" class="nav-btn w-full p-2.5 rounded-lg flex items-center justify-center gap-3 text-left transition-all duration-150 text-stone-600 hover:text-red-900 hover:bg-stone-100 font-semibold text-xs uppercase tracking-wide border-[0.5px] border-transparent">
+                    <div class="w-5 h-5 flex items-center justify-center shrink-0"><i class="fa-solid fa-file-invoice text-sm"></i></div>
+                    <span class="truncate nav-label hidden">Reportes</span>
+                </button>
+
+                <button onclick="switchSection('elementos', '../secciones/apps/regas/elementos.html')" id="btn-elementos" class="nav-btn w-full p-2.5 rounded-lg flex items-center justify-center gap-3 text-left transition-all duration-150 text-stone-600 hover:text-red-900 hover:bg-stone-100 font-semibold text-xs uppercase tracking-wide border-[0.5px] border-transparent">
+                    <div class="w-5 h-5 flex items-center justify-center shrink-0"><i class="fa-solid fa-users-gear text-sm"></i></div>
+                    <span class="truncate nav-label hidden">Elementos</span>
+                </button>
+
+                <button onclick="switchSection('casetas', '../secciones/apps/regas/casetas.html')" id="btn-casetas" class="nav-btn w-full p-2.5 rounded-lg flex items-center justify-center gap-3 text-left transition-all duration-150 text-stone-600 hover:text-red-900 hover:bg-stone-100 font-semibold text-xs uppercase tracking-wide border-[0.5px] border-transparent">
+                    <div class="w-5 h-5 flex items-center justify-center shrink-0"><i class="fa-solid fa-door-open text-sm"></i></div>
+                    <span class="truncate nav-label hidden">Casetas</span>
+                </button>
+
+                <button onclick="switchSection('eventos', '../secciones/apps/regas/eventos.html')" id="btn-eventos" class="nav-btn w-full p-2.5 rounded-lg flex items-center justify-center gap-3 text-left transition-all duration-150 text-stone-600 hover:text-red-900 hover:bg-stone-100 font-semibold text-xs uppercase tracking-wide border-[0.5px] border-transparent">
+                    <div class="w-5 h-5 flex items-center justify-center shrink-0"><i class="fa-solid fa-bullhorn text-sm"></i></div>
+                    <span class="truncate nav-label hidden">Eventos</span>
+                </button>
+
+                <button onclick="switchSection('recorridos', '../secciones/apps/regas/recorridos.html')" id="btn-recorridos" class="nav-btn w-full p-2.5 rounded-lg flex items-center justify-center gap-3 text-left transition-all duration-150 text-stone-600 hover:text-red-900 hover:bg-stone-100 font-semibold text-xs uppercase tracking-wide border-[0.5px] border-transparent">
+                    <div class="w-5 h-5 flex items-center justify-center shrink-0"><i class="fa-solid fa-route text-sm"></i></div>
+                    <span class="truncate nav-label hidden">Recorridos</span>
+                </button>
+
+            </nav>
+        </div>
+
+        <!-- Pie de menú (Metadatos y Estado - Oculto por defecto en modo compacto) -->
+        <div id="sidebar-footer" class="hidden p-3 border-t-[0.5px] bg-stone-100/50 border-stone-200 text-[10px] font-mono text-stone-400 items-center justify-between min-h-[38px] w-full min-w-[256px]">
+            <span id="footer-version">REGAS CORE v2.6</span>
+            <span class="text-emerald-600 font-bold flex items-center gap-1 shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> <span id="footer-status-text">OK</span>
+            </span>
+        </div>
+    </aside>
+
+    <!-- Área Principal de Contenido (Lienzo de Iframes) -->
+    <main class="flex-1 h-full relative flex flex-col overflow-hidden bg-stone-100">
+        <div id="regas-iframe-container" class="w-full h-full relative">
+            <iframe id="iframe-inicio" src="../secciones/apps/regas/inicio.html" class="absolute inset-0 w-full h-full border-0 transition-opacity duration-200 opacity-100 z-10"></iframe>
+            <iframe id="iframe-planeacion" class="absolute inset-0 w-full h-full border-0 transition-opacity duration-200 opacity-0 z-0 pointer-events-none"></iframe>
+            <iframe id="iframe-reportes" class="absolute inset-0 w-full h-full border-0 transition-opacity duration-200 opacity-0 z-0 pointer-events-none"></iframe>
+            <iframe id="iframe-elementos" class="absolute inset-0 w-full h-full border-0 transition-opacity duration-200 opacity-0 z-0 pointer-events-none"></iframe>
+            <iframe id="iframe-casetas" class="absolute inset-0 w-full h-full border-0 transition-opacity duration-200 opacity-0 z-0 pointer-events-none"></iframe>
+            <iframe id="iframe-eventos" class="absolute inset-0 w-full h-full border-0 transition-opacity duration-200 opacity-0 z-0 pointer-events-none"></iframe>
+            <iframe id="iframe-recorridos" class="absolute inset-0 w-full h-full border-0 transition-opacity duration-200 opacity-0 z-0 pointer-events-none"></iframe>
+        </div>
+    </main>
+
+    <script>
+        // MÁQUINA DE ESTADOS DEL SIDEBAR:
+        // 0 = Expandido (con etiquetas)
+        // 1 = Compacto (sin etiquetas)
+        // 2 = Oculto
+        // Configurado por defecto en 1 (Compacto)
+        let currentSidebarMode = 1;
+
+        window.toggleSidebarMode = () => {
+            const sidebar = document.getElementById('tactical-sidebar');
+            const headerText = document.getElementById('header-text');
+            const sidebarHeader = document.getElementById('sidebar-header');
+            const compactTrigger = document.getElementById('sidebar-compact-trigger');
+            const footer = document.getElementById('sidebar-footer');
+            const toggleIcon = document.getElementById('toggle-angle-icon');
+            const floatTrigger = document.getElementById('sidebar-trigger');
+            const labels = document.querySelectorAll('.nav-label');
+            const navButtons = document.querySelectorAll('.nav-btn');
+
+            // Conmutación cíclica (1 -> 2 -> 0 -> 1...)
+            currentSidebarMode = (currentSidebarMode + 1) % 3;
+
+            if (currentSidebarMode === 0) {
+                // === MODO 0: EXPANDIDO (CON ETIQUETAS) ===
+                sidebar.classList.remove('w-16', 'w-0');
+                sidebar.classList.add('w-64');
+                
+                // Restaurar visibilidad de contenedores anchos
+                sidebarHeader.classList.remove('hidden');
+                sidebarHeader.classList.add('flex');
+                compactTrigger.classList.remove('flex');
+                compactTrigger.classList.add('hidden');
+                footer.classList.remove('hidden');
+                footer.classList.add('flex');
+                
+                headerText.style.display = 'block';
+                
+                // Mostrar etiquetas de texto y restablecer alineación nativa izquierda
+                labels.forEach(lbl => lbl.classList.remove('hidden'));
+                navButtons.forEach(btn => {
+                    btn.classList.remove('justify-center');
+                    btn.classList.add('text-left');
+                });
+                
+                // Ocultar disparador flotante de emergencia
+                floatTrigger.classList.remove('flex');
+                floatTrigger.classList.add('hidden');
+                if (toggleIcon) toggleIcon.classList.remove('rotate-180');
+
+            } else if (currentSidebarMode === 1) {
+                // === MODO 1: COMPACTO (SIN ETIQUETAS) ===
+                sidebar.classList.remove('w-64', 'w-0');
+                sidebar.classList.add('w-16');
+                
+                // Ocultar textos identificadores y cabecera completa
+                sidebarHeader.classList.remove('flex');
+                sidebarHeader.classList.add('hidden');
+                compactTrigger.classList.remove('hidden');
+                compactTrigger.classList.add('flex');
+                footer.classList.remove('flex');
+                footer.classList.add('hidden');
+                
+                headerText.style.display = 'none';
+                
+                // Ocultar textos de los botones y centrarlos geométricamente
+                labels.forEach(lbl => lbl.classList.add('hidden'));
+                navButtons.forEach(btn => {
+                    btn.classList.remove('text-left');
+                    btn.classList.add('justify-center');
+                });
+                
+                // Asegurar que el trigger flotante siga oculto
+                floatTrigger.classList.remove('flex');
+                floatTrigger.classList.add('hidden');
+                if (toggleIcon) toggleIcon.classList.add('rotate-180');
+
+            } else if (currentSidebarMode === 2) {
+                // === MODO 2: OCULTO ===
+                sidebar.classList.remove('w-16', 'w-64');
+                sidebar.classList.add('w-0');
+                
+                // Habilitar botón de activación flotante en esquina inferior
+                floatTrigger.classList.remove('hidden');
+                floatTrigger.classList.add('flex');
+            }
+        };
+
+        // GESTIÓN DE ENLACES MULTI-IFRAME
+        window.switchSection = (sectionId, fullPath) => {
+            const targets = ['inicio', 'planeacion', 'reportes', 'elementos', 'casetas', 'eventos', 'recorridos'];
+            
+            targets.forEach(id => {
+                const iframe = document.getElementById(`iframe-${id}`);
+                const btn = document.getElementById(`btn-${id}`);
+                
+                if (!iframe) return; // Salvaguarda para evitar fallos si no se encuentra el iframe
+                
+                if (id === sectionId) {
+                    // Inicializar Lazy Loading si no se ha cargado previamente el src
+                    if (!iframe.getAttribute('src')) {
+                        iframe.setAttribute('src', fullPath);
+                    }
+                    // Activar visualización del iframe enfocado
+                    iframe.classList.remove('opacity-0', 'z-0', 'pointer-events-none');
+                    iframe.classList.add('opacity-100', 'z-10');
+                    
+                    // Estilizar botón activo con acento rojo operativo
+                    if (btn) {
+                        btn.className = "nav-btn w-full p-2.5 rounded-lg flex items-center gap-3 text-left transition-all duration-150 bg-red-900/5 text-red-900 font-black text-xs uppercase tracking-wide border-[0.5px] border-red-800/15";
+                    }
+                } else {
+                    // Apagar los demás iframes en segundo plano
+                    iframe.classList.remove('opacity-100', 'z-10');
+                    iframe.classList.add('opacity-0', 'z-0', 'pointer-events-none');
+                    
+                    // Restablecer estilos neutros a botones inactivos
+                    if (btn) {
+                        btn.className = "nav-btn w-full p-2.5 rounded-lg flex items-center gap-3 text-left transition-all duration-150 text-stone-600 hover:text-red-900 hover:bg-stone-100 font-semibold text-xs uppercase tracking-wide border-[0.5px] border-transparent";
+                    }
+                }
+            });
+
+            // Preservar el comportamiento geométrico centrado de iconos si está en modo compacto
+            if (currentSidebarMode === 1) {
+                document.querySelectorAll('.nav-btn').forEach(btn => {
+                    btn.classList.remove('text-left');
+                    btn.classList.add('justify-center');
+                });
+            }
+        };
+    </script>
+</body>
+</html>

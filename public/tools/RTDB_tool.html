@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase RTDB Node Manager & Backup Tool</title>
+    <!-- Tailwind CSS with class-based Dark Mode configuration -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        }
+        const savedTheme = localStorage.getItem('rtdb_explorer_theme') || 'dark';
+        if (savedTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar styling optimized for system colors */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .dark ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
+
+    <!-- Header -->
+    <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 py-4 px-6 flex justify-between items-center shadow-md transition-colors duration-200">
+        <div class="flex items-center space-x-3">
+            <div class="bg-amber-500 text-slate-950 p-2 rounded-lg font-bold flex items-center justify-center shadow-md">
+                <i class="fa-solid fa-database text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">RTDB Node Explorer</h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Carga, descarga y administra nodos en tiempo real a alta velocidad</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <!-- Theme Toggle Button -->
+            <button onclick="toggleTheme()" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 p-2 rounded-lg border border-slate-200 dark:border-slate-700 transition flex items-center justify-center w-9 h-9" title="Cambiar Tema">
+                <i id="theme-toggle-icon" class="fa-solid fa-moon"></i>
+            </button>
+            <span id="global-status" class="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-1 px-3 rounded-full border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-all">
+                <span class="h-2 w-2 rounded-full bg-slate-400 animate-pulse"></span> Desconectado
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- Sidebar: Projects & DBs -->
+        <aside class="w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col overflow-y-auto shrink-0 transition-colors duration-200">
+            <!-- Projects Section -->
+            <div class="p-4 border-b border-slate-200 dark:border-slate-800">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Proyectos</h2>
+                    <button onclick="openModal('project-modal')" class="text-amber-600 dark:text-amber-500 hover:text-amber-500 transition text-sm flex items-center gap-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                        <i class="fa-solid fa-plus"></i> Nuevo
+                    </button>
+                </div>
+                <div id="projects-list" class="space-y-1 max-h-48 overflow-y-auto pr-1">
+                    <p class="text-xs text-slate-400 dark:text-slate-500 py-2 text-center italic">No hay proyectos creados.</p>
+                </div>
+            </div>
+
+            <!-- Databases Section -->
+            <div class="p-4 flex-1 flex flex-col min-h-0">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Bases de Datos</h2>
+                    <button id="btn-new-db" disabled onclick="openModal('db-modal')" class="text-amber-600/50 dark:text-amber-500/50 disabled:opacity-50 disabled:pointer-events-none transition text-sm flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                        <i class="fa-solid fa-plus"></i> Agregar DB
+                    </button>
+                </div>
+                <div id="databases-list" class="space-y-1 flex-1 overflow-y-auto pr-1">
+                    <p class="text-xs text-slate-400 dark:text-slate-500 py-4 text-center italic">Selecciona un proyecto para ver sus bases de datos.</p>
+                </div>
+            </div>
+
+            <!-- Active Connection Info -->
+            <div id="active-db-card" class="p-4 bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 hidden">
+                <div class="bg-white dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <p class="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-semibold">Base de datos activa</p>
+                    <h3 id="active-db-title" class="text-sm font-bold text-amber-600 dark:text-amber-400 truncate mt-0.5">Ninguna</h3>
+                    <div id="active-db-auth-info" class="text-xs text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+                        <p class="flex items-center gap-1 text-[11px]"><i class="fa-solid fa-user-shield text-slate-400"></i> <span id="active-auth-type">Anónimo</span></p>
+                        <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate" id="active-auth-email"></p>
+                    </div>
+                    <div class="mt-3 flex gap-2">
+                        <button onclick="promptManualLogin()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-semibold py-1 px-2 rounded transition flex items-center justify-center gap-1 shadow-sm">
+                            <i class="fa-solid fa-key"></i> Autenticar
+                        </button>
+                        <button onclick="disconnectActiveDb()" class="bg-slate-200 dark:bg-slate-800 hover:bg-red-200 dark:hover:bg-red-950 text-slate-700 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 text-xs py-1 px-2 rounded transition border border-slate-300 dark:border-slate-700 hover:border-red-300 dark:hover:border-red-900" title="Desconectar">
+                            <i class="fa-solid fa-power-off"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Explorer Content -->
+        <section class="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-950 transition-colors duration-200">
+            <!-- No Selection State -->
+            <div id="no-selection-state" class="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50 dark:bg-slate-950">
+                <div class="w-20 h-20 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                    <i class="fa-solid fa-folder-tree text-3xl"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-700 dark:text-slate-300">Explorador de RTDB</h3>
+                <p class="text-slate-500 dark:text-slate-400 text-sm max-w-sm mt-1">Selecciona un proyecto y su base de datos activa para cargar los nodos. Se aplicará almacenamiento en caché para una navegación instantánea.</p>
+                <div class="mt-6 flex gap-3">
+                    <button onclick="openModal('project-modal')" class="bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
+                        <i class="fa-solid fa-folder-plus text-amber-500"></i> Nuevo Proyecto
+                    </button>
+                </div>
+            </div>
+
+            <!-- Database Content Workspace -->
+            <div id="database-workspace" class="flex-1 flex flex-col hidden min-h-0">
+                <!-- Path Breadcrumbs Navigation -->
+                <div class="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between transition-colors duration-200">
+                    <div class="flex items-center space-x-2 text-sm overflow-x-auto py-1 shrink-0 max-w-[70%]">
+                        <span class="text-slate-500 dark:text-slate-400"><i class="fa-solid fa-network-wired"></i> Ruta:</span>
+                        <div id="path-breadcrumbs" class="flex items-center space-x-1.5 font-mono text-xs font-semibold text-amber-600 dark:text-amber-400">
+                            <!-- Breadcrumbs go here dynamically -->
+                        </div>
+                    </div>
+                    <!-- Actions at current Path -->
+                    <div class="flex items-center space-x-2">
+                        <button onclick="refreshCurrentNode(true)" class="bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-md text-xs font-medium transition border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm" title="Forzar recarga remota">
+                            <i id="refresh-icon" class="fa-solid fa-sync"></i> Sincronizar Nube
+                        </button>
+                        <button onclick="goToPath('/')" class="bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-md text-xs font-medium transition border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm" title="Ir a la Raíz">
+                            <i class="fa-solid fa-house"></i> Raíz
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Explorer Split Screen -->
+                <div class="flex-1 flex overflow-hidden min-h-0">
+                    
+                    <!-- Left panel: Subnodes & Navigation -->
+                    <div class="w-1/3 border-r border-slate-200 dark:border-slate-800 p-6 flex flex-col min-h-0">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-circle-nodes text-amber-500"></i> Claves / Subnodos
+                            </h3>
+                            <button onclick="openModal('add-node-modal')" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold px-2 py-1 rounded text-xs transition flex items-center gap-1 shadow">
+                                <i class="fa-solid fa-plus"></i> Agregar
+                            </button>
+                        </div>
+                        
+                        <!-- List of immediate subnodes -->
+                        <div id="subnodes-container" class="flex-1 overflow-y-auto bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg p-2 space-y-1">
+                            <p class="text-xs text-slate-500 text-center py-8">Cargando subnodos o no hay datos...</p>
+                        </div>
+
+                        <!-- Manual navigation input -->
+                        <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                            <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Ir a ruta específica</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="manual-path-input" placeholder="/ejemplo/ruta/subnodo" class="flex-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-amber-500 font-mono">
+                                <button onclick="navigateManualPath()" class="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 px-3 py-1.5 rounded text-xs transition font-semibold text-slate-700 dark:text-slate-200">
+                                    Ir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right panel: Node View & Download / Upload Actions -->
+                    <div class="w-2/3 p-6 flex flex-col min-h-0 bg-slate-50/50 dark:bg-slate-950/40">
+                        <!-- Heading / Node Overview -->
+                        <div class="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                                    <i class="fa-solid fa-box-open text-slate-400"></i> Datos del Nodo
+                                </h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Contenido actual del nodo activo en tiempo real</p>
+                            </div>
+                            <div class="flex gap-2">
+                                <!-- Download node trigger -->
+                                <button onclick="downloadActiveNode()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-2 rounded-lg text-xs transition flex items-center gap-2 shadow-md">
+                                    <i class="fa-solid fa-download"></i> Descargar Nodo (JSON)
+                                </button>
+                                <!-- Upload node trigger -->
+                                <button onclick="openModal('upload-modal')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-2 rounded-lg text-xs transition flex items-center gap-2 shadow-md">
+                                    <i class="fa-solid fa-upload"></i> Cargar / Importar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- JSON Raw Viewer / Warnings Panel -->
+                        <div class="flex-1 flex flex-col min-h-0 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm relative">
+                            <div class="bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-850 px-4 py-2 flex justify-between items-center shrink-0">
+                                <span class="text-xs font-mono text-slate-500">Visualizador estructurado</span>
+                                <button onclick="copyToClipboardCurrentJson()" class="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 text-xs flex items-center gap-1 transition">
+                                    <i class="fa-solid fa-copy"></i> Copiar JSON
+                                </button>
+                            </div>
+
+                            <!-- Warning screen for oversized JSON rendering protection -->
+                            <div id="json-warning-container" class="absolute inset-0 bg-slate-100/90 dark:bg-slate-900/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-10 hidden">
+                                <i class="fa-solid fa-triangle-exclamation text-amber-500 text-4xl mb-3"></i>
+                                <h4 class="text-md font-bold text-slate-800 dark:text-slate-200">Nodo con Volumen Alto de Datos</h4>
+                                <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mt-1 mb-4">
+                                    Este nodo pesa aproximadamente <span id="json-size-label" class="font-bold text-amber-600 dark:text-amber-400">0 KB</span>. Renderizarlo de golpe puede ralentizar la interfaz de usuario.
+                                </p>
+                                <div class="flex gap-3">
+                                    <button onclick="downloadActiveNode()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-lg text-xs transition shadow">
+                                        <i class="fa-solid fa-download"></i> Descargar de inmediato
+                                    </button>
+                                    <button onclick="bypassJsonWarning()" class="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 font-semibold px-4 py-2 rounded-lg text-xs transition">
+                                        Forzar Visualización
+                                    </button>
+                                </div>
+                            </div>
+
+                            <textarea id="json-node-preview" readonly class="flex-1 bg-slate-50 dark:bg-slate-900 p-4 font-mono text-xs text-slate-800 dark:text-slate-300 resize-none focus:outline-none overflow-y-auto leading-relaxed border-none" placeholder="No hay datos en este nodo o el nodo está vacío."></textarea>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modals Overlay -->
+    
+    <!-- 1. Add Project Modal -->
+    <div id="project-modal" class="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl relative text-slate-800 dark:text-slate-100">
+            <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-folder-plus text-amber-500"></i> Agregar Nuevo Proyecto
+            </h3>
+            <form id="project-form" onsubmit="handleCreateProject(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Nombre del Proyecto</label>
+                        <input type="text" id="project-name" required placeholder="Mi Proyecto Firebase" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 transition text-slate-800 dark:text-slate-100">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeModal('project-modal')" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
+                        Guardar Proyecto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. Add Database Modal -->
+    <div id="db-modal" class="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-lg p-6 shadow-2xl overflow-y-auto max-h-[90vh] text-slate-800 dark:text-slate-100">
+            <h3 class="text-lg font-bold mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-database text-amber-500"></i> Agregar Base de Datos (RTDB)
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Ingresa las credenciales de configuración de tu proyecto de Firebase. Puedes encontrarlas en la consola de Firebase -> Configuración del proyecto.</p>
+            
+            <form id="db-form" onsubmit="handleCreateDatabase(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Nombre Identificador (Alias)</label>
+                        <input type="text" id="db-alias" required placeholder="Producción RTDB, Testing, etc." class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                    </div>
+                    
+                    <div class="border-t border-slate-200 dark:border-slate-800 pt-3">
+                        <span class="text-xs font-semibold text-amber-600 dark:text-amber-500">Configuración SDK de Firebase</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">API Key</label>
+                            <input type="text" id="db-api-key" required placeholder="AIzaSy..." class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Auth Domain</label>
+                            <input type="text" id="db-auth-domain" required placeholder="mi-app.firebaseapp.com" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Database URL (RTDB URL)</label>
+                        <input type="url" id="db-url" required placeholder="https://mi-app-default-rtdb.firebaseio.com" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Project ID</label>
+                            <input type="text" id="db-project-id" required placeholder="mi-app-12345" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">App ID</label>
+                            <input type="text" id="db-app-id" required placeholder="1:123456789:web:abcdef..." class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-200 dark:border-slate-800 pt-3">
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 flex justify-between items-center">
+                            <span>Autenticación Predeterminada (Opcional)</span>
+                            <span class="text-[10px] text-slate-400 normal-case font-normal">Se almacena localmente</span>
+                        </label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <input type="email" id="db-auth-user" placeholder="correo@ejemplo.com" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                            </div>
+                            <div>
+                                <input type="password" id="db-auth-pass" placeholder="Contraseña de Firebase" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Si dejas esto en blanco, intentaremos de forma anónima primero. Si requiere permisos, te los pediremos dinámicamente.</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeModal('db-modal')" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
+                        Guardar DB
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 3. Dynamic Authentication Login Modal (Fallback) -->
+    <div id="auth-modal" class="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm z-[100] flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl relative text-slate-800 dark:text-slate-100">
+            <h3 class="text-lg font-bold mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-lock text-red-500"></i> Autenticación Requerida
+            </h3>
+            <p id="auth-modal-reason" class="text-xs text-slate-500 dark:text-slate-400 mb-4">No tienes permisos para acceder o escribir en este nodo usando credenciales anónimas. Ingresa una cuenta autorizada.</p>
+            <form id="auth-form" onsubmit="handleManualLogin(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Correo Electrónico</label>
+                        <input type="email" id="auth-email-input" required placeholder="correo@ejemplo.com" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Contraseña</label>
+                        <input type="password" id="auth-pass-input" required placeholder="••••••••" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                    </div>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="auth-save-credentials" checked class="h-4 w-4 bg-slate-100 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-amber-500 focus:ring-transparent rounded">
+                        <label for="auth-save-credentials" class="ml-2 text-xs text-slate-500 dark:text-slate-400">Recordar credenciales de forma local</label>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeModal('auth-modal')" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
+                        Iniciar Sesión
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 4. Add Node / Subnode Modal -->
+    <div id="add-node-modal" class="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl relative text-slate-800 dark:text-slate-100">
+            <h3 class="text-lg font-bold mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-folder-tree text-amber-500"></i> Crear Subnodo
+            </h3>
+            <p id="add-node-path-desc" class="text-xs text-slate-500 dark:text-slate-400 mb-4">Agregando a: <span class="font-mono text-amber-500">/</span></p>
+            <form id="add-node-form" onsubmit="handleCreateSubnode(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Nombre del Nodo (Clave)</label>
+                        <input type="text" id="new-node-key" required placeholder="Ej: usuarios, config, compras" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Valor Inicial (JSON o Texto)</label>
+                        <textarea id="new-node-value" placeholder='{"activo": true, "creado": "ahora"} o un texto sencillo' class="w-full h-24 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2 text-sm font-mono focus:outline-none focus:border-amber-500 transition text-slate-800 dark:text-slate-100"></textarea>
+                        <span class="text-[10px] text-slate-400 dark:text-slate-500 block mt-1">Si lo dejas vacío, se guardará como un valor vacío en Firebase.</span>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeModal('add-node-modal')" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
+                        Crear Nodo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 5. Upload / Import JSON Modal -->
+    <div id="upload-modal" class="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-lg p-6 shadow-2xl relative text-slate-800 dark:text-slate-100">
+            <h3 class="text-lg font-bold mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-cloud-arrow-up text-blue-500"></i> Cargar datos en Nodo
+            </h3>
+            <p id="upload-node-path-desc" class="text-xs text-slate-500 dark:text-slate-400 mb-4">Escribir datos en: <span class="font-mono text-amber-500">/</span></p>
+            
+            <div class="space-y-4">
+                <!-- Drop area -->
+                <div id="drop-zone" class="border-2 border-dashed border-slate-300 hover:border-blue-500 dark:border-slate-700 dark:hover:border-blue-500 rounded-xl p-6 text-center cursor-pointer transition bg-slate-50 dark:bg-slate-950/50">
+                    <input type="file" id="json-file-input" class="hidden" accept=".json" onchange="handleFileSelect(event)">
+                    <i class="fa-solid fa-file-code text-3xl text-slate-400 dark:text-slate-500 mb-2"></i>
+                    <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">Selecciona o arrastra tu archivo .json</p>
+                    <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">El archivo debe contener JSON válido</p>
+                </div>
+
+                <div class="text-center text-xs text-slate-400 dark:text-slate-500 flex items-center justify-center gap-2">
+                    <span class="h-px bg-slate-200 dark:bg-slate-800 flex-1"></span> O pega tu JSON directamente abajo <span class="h-px bg-slate-200 dark:bg-slate-800 flex-1"></span>
+                </div>
+
+                <div>
+                    <textarea id="raw-upload-json" placeholder="Pega tu JSON de datos aquí..." class="w-full h-32 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-blue-500 transition text-slate-800 dark:text-slate-100"></textarea>
+                </div>
+
+                <!-- Choose Strategy -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Estrategia de Carga</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <label class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 flex items-start gap-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition">
+                            <input type="radio" name="upload-strategy" value="set" checked class="mt-0.5 text-blue-500 focus:ring-0">
+                            <div>
+                                <p class="text-xs font-bold">Reemplazar (SET)</p>
+                                <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sobrescribe todos los datos existentes en este nodo por los nuevos.</p>
+                            </div>
+                        </label>
+                        <label class="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 flex items-start gap-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition">
+                            <input type="radio" name="upload-strategy" value="update" class="mt-0.5 text-blue-500 focus:ring-0">
+                            <div>
+                                <p class="text-xs font-bold">Combinar (UPDATE)</p>
+                                <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Une los datos nuevos con los existentes sin borrar otros subnodos.</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="closeModal('upload-modal')" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                    Cancelar
+                </button>
+                <button onclick="triggerUploadExecution()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
+                    Ejecutar Carga
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Dialog Modal (Alternative to Native Confirm) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm z-[150] flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-md p-6 shadow-2xl relative text-slate-800 dark:text-slate-100">
+            <h3 id="confirm-title" class="text-lg font-bold mb-2">¿Estás seguro?</h3>
+            <p id="confirm-msg" class="text-sm text-slate-500 dark:text-slate-400 mb-6">Esta acción no se puede deshacer.</p>
+            <div class="flex justify-end gap-3">
+                <button id="confirm-cancel-btn" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                    Cancelar
+                </button>
+                <button id="confirm-ok-btn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[200] space-y-2"></div>
+
+
+    <!-- Import Firebase Modular SDK -->
+    <script type="module">
+        import { initializeApp, getApps, deleteApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getDatabase, ref, get, set, update, child } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+
+        // Local Storage State Key
+        const STORAGE_KEY = "rtdb_explorer_projects_v1";
+
+        let state = {
+            projects: [],
+            selectedProjectId: null,
+            selectedDbId: null,
+            currentPath: "/",
+            currentNodeData: null,
+            forceFullJsonRender: false,
+            cache: {},          // SWR path navigation cache: { [dbId_path]: raw_data_payload }
+            appsCache: {},      // Firebase initialization registry cache: { [dbId]: { app, auth, db } }
+            firebase: {
+                app: null,
+                auth: null,
+                db: null
+            }
+        };
+
+        // On Page Load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadStateFromLocalStorage();
+            renderProjects();
+            setupDragAndDrop();
+            updateThemeButton();
+        });
+
+        // Theme controllers
+        window.toggleTheme = function() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('rtdb_explorer_theme', isDark ? 'dark' : 'light');
+            updateThemeButton();
+        }
+
+        function updateThemeButton() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const icon = document.getElementById('theme-toggle-icon');
+            if (icon) {
+                icon.className = isDark ? 'fa-solid fa-sun text-amber-400' : 'fa-solid fa-moon text-slate-600';
+            }
+        }
+
+        // Load State
+        function loadStateFromLocalStorage() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    state.projects = JSON.parse(saved);
+                } catch(e) {
+                    console.error("Error cargando localStorage, reiniciando.", e);
+                    state.projects = [];
+                }
+            } else {
+                state.projects = [];
+            }
+        }
+
+        // Save State
+        function saveStateToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.projects));
+        }
+
+        // --- Custom Notifications (Toast) ---
+        window.showToast = function(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `flex items-center gap-3 p-4 rounded-lg shadow-lg border transition-all transform translate-y-2 opacity-0 duration-300 text-sm max-w-sm ${
+                type === 'success' ? 'bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' :
+                type === 'error' ? 'bg-white dark:bg-slate-900 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400' :
+                'bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400'
+            }`;
+
+            const icon = type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-triangle-exclamation';
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} text-lg shrink-0"></i>
+                <div class="flex-1">${message}</div>
+                <button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>
+            `;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 50);
+
+            // Auto dismiss after 3.5s
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-1');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // --- Modals Controller ---
+        window.openModal = function(id) {
+            const modal = document.getElementById(id);
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+            }, 10);
+
+            // Update specific paths placeholders dynamically inside modals
+            if (id === 'add-node-modal') {
+                document.getElementById('add-node-path-desc').innerHTML = `Agregando a: <span class="font-mono text-amber-600 dark:text-amber-400">${state.currentPath}</span>`;
+            } else if (id === 'upload-modal') {
+                document.getElementById('upload-node-path-desc').innerHTML = `Escribir datos en: <span class="font-mono text-amber-600 dark:text-amber-400">${state.currentPath}</span>`;
+            }
+        }
+
+        window.closeModal = function(id) {
+            const modal = document.getElementById(id);
+            modal.classList.add('opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        // --- Custom Confirm Box (Avoiding standard alert/confirm dialog blocks) ---
+        window.customConfirm = function(title, message, callback) {
+            const modal = document.getElementById('confirm-modal');
+            const titleEl = document.getElementById('confirm-title');
+            const msgEl = document.getElementById('confirm-msg');
+            const okBtn = document.getElementById('confirm-ok-btn');
+            const cancelBtn = document.getElementById('confirm-cancel-btn');
+
+            titleEl.textContent = title;
+            msgEl.textContent = message;
+
+            modal.classList.remove('hidden');
+            setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+            const close = () => {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            };
+
+            okBtn.onclick = () => {
+                close();
+                callback(true);
+            };
+
+            cancelBtn.onclick = () => {
+                close();
+                callback(false);
+            };
+        }
+
+        // --- Drag and drop setups for JSON upload ---
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('drop-zone');
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-blue-950/20');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-950/20');
+                }, false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length) {
+                    processUploadedJsonFile(files[0]);
+                }
+            });
+
+            dropZone.onclick = () => {
+                document.getElementById('json-file-input').click();
+            };
+        }
+
+        window.handleFileSelect = function(e) {
+            const files = e.target.files;
+            if (files.length) {
+                processUploadedJsonFile(files[0]);
+            }
+        }
+
+        function processUploadedJsonFile(file) {
+            if (file.type !== "application/json" && !file.name.endsWith('.json')) {
+                showToast("El archivo seleccionado debe ser un .json válido", "error");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    document.getElementById('raw-upload-json').value = JSON.stringify(parsed, null, 2);
+                    showToast(`Archivo ${file.name} leído con éxito`, "success");
+                } catch(error) {
+                    showToast("No se pudo parsear el archivo JSON. Estructura corrupta.", "error");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- Render Projects ---
+        function renderProjects() {
+            const list = document.getElementById('projects-list');
+            list.innerHTML = '';
+
+            if (state.projects.length === 0) {
+                list.innerHTML = `<p class="text-xs text-slate-400 dark:text-slate-500 py-2 text-center italic">No hay proyectos creados.</p>`;
+                document.getElementById('btn-new-db').disabled = true;
+                document.getElementById('btn-new-db').className = "text-amber-500/50 dark:text-amber-500/50 disabled:opacity-50 disabled:pointer-events-none transition text-sm flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700";
+                renderDatabases();
+                return;
+            }
+
+            state.projects.forEach(proj => {
+                const isActive = proj.id === state.selectedProjectId;
+                const div = document.createElement('div');
+                div.className = `group flex items-center justify-between p-2 rounded-lg cursor-pointer transition ${
+                    isActive ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-transparent'
+                }`;
+                div.onclick = () => selectProject(proj.id);
+
+                div.innerHTML = `
+                    <div class="flex items-center gap-2 truncate">
+                        <i class="fa-solid fa-folder ${isActive ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'}"></i>
+                        <span class="text-xs font-semibold truncate">${proj.name}</span>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteProjectConfirm('${proj.id}')" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 transition" title="Borrar Proyecto">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        // --- Render Databases of Selected Project ---
+        function renderDatabases() {
+            const list = document.getElementById('databases-list');
+            list.innerHTML = '';
+
+            if (!state.selectedProjectId) {
+                list.innerHTML = `<p class="text-xs text-slate-400 dark:text-slate-500 py-4 text-center italic">Selecciona un proyecto para ver sus bases de datos.</p>`;
+                return;
+            }
+
+            const activeProj = state.projects.find(p => p.id === state.selectedProjectId);
+            const dbs = activeProj?.databases || [];
+
+            if (dbs.length === 0) {
+                list.innerHTML = `<p class="text-xs text-slate-400 dark:text-slate-500 py-4 text-center italic">No hay bases de datos configuradas.</p>`;
+                return;
+            }
+
+            dbs.forEach(db => {
+                const isActive = db.id === state.selectedDbId;
+                const div = document.createElement('div');
+                div.className = `group flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition ${
+                    isActive ? 'bg-slate-100 dark:bg-slate-800 border-l-4 border-amber-500 text-slate-900 dark:text-slate-100 shadow-sm' : 'hover:bg-slate-100/60 dark:hover:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-l-4 border-transparent'
+                }`;
+                div.onclick = () => selectDatabase(db.id);
+
+                div.innerHTML = `
+                    <div class="flex flex-col min-w-0 flex-1 pr-2">
+                        <div class="flex items-center gap-1.5">
+                            <i class="fa-solid fa-cloud-bolt text-xs ${isActive ? 'text-amber-500' : 'text-slate-400 dark:text-slate-600'}"></i>
+                            <span class="text-xs font-bold truncate text-slate-700 dark:text-slate-200">${db.alias}</span>
+                        </div>
+                        <span class="text-[9px] text-slate-400 dark:text-slate-500 truncate font-mono mt-0.5">${db.databaseURL}</span>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteDbConfirm('${db.id}')" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 transition" title="Borrar DB">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        // --- Action Handlers ---
+        
+        // Add Project
+        window.handleCreateProject = function(e) {
+            e.preventDefault();
+            const nameInput = document.getElementById('project-name');
+            const name = nameInput.value.trim();
+            if (!name) return;
+
+            const newProj = {
+                id: 'proj_' + Date.now(),
+                name: name,
+                databases: []
+            };
+
+            state.projects.push(newProj);
+            saveStateToLocalStorage();
+            nameInput.value = '';
+            closeModal('project-modal');
+            showToast(`Proyecto "${name}" creado con éxito`);
+            selectProject(newProj.id);
+        }
+
+        // Delete Project
+        window.deleteProjectConfirm = function(id) {
+            const proj = state.projects.find(p => p.id === id);
+            if (!proj) return;
+
+            customConfirm(
+                "¿Eliminar Proyecto?",
+                `¿Estás seguro de que deseas eliminar el proyecto "${proj.name}"? Se perderán todas sus configuraciones de base de datos asociadas localmente.`,
+                (confirmed) => {
+                    if (confirmed) {
+                        state.projects = state.projects.filter(p => p.id !== id);
+                        if (state.selectedProjectId === id) {
+                            state.selectedProjectId = null;
+                            state.selectedDbId = null;
+                            disconnectActiveDb();
+                        }
+                        saveStateToLocalStorage();
+                        renderProjects();
+                        showToast("Proyecto eliminado con éxito", "info");
+                    }
+                }
+            );
+        }
+
+        // Select Project
+        window.selectProject = function(id) {
+            state.selectedProjectId = id;
+            
+            // Enable Add DB button
+            const btnNewDb = document.getElementById('btn-new-db');
+            btnNewDb.disabled = false;
+            btnNewDb.className = "text-amber-500 hover:text-amber-400 transition text-sm flex items-center gap-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700";
+
+            renderProjects();
+            renderDatabases();
+        }
+
+        // Add Database
+        window.handleCreateDatabase = function(e) {
+            e.preventDefault();
+            if (!state.selectedProjectId) return;
+
+            const alias = document.getElementById('db-alias').value.trim();
+            const apiKey = document.getElementById('db-api-key').value.trim();
+            const authDomain = document.getElementById('db-auth-domain').value.trim();
+            const databaseURL = document.getElementById('db-url').value.trim();
+            const projectId = document.getElementById('db-project-id').value.trim();
+            const appId = document.getElementById('db-app-id').value.trim();
+            const savedUser = document.getElementById('db-auth-user').value.trim();
+            const savedPass = document.getElementById('db-auth-pass').value.trim();
+
+            const projectIndex = state.projects.findIndex(p => p.id === state.selectedProjectId);
+            if (projectIndex === -1) return;
+
+            const newDb = {
+                id: 'db_' + Date.now(),
+                alias,
+                config: { apiKey, authDomain, databaseURL, projectId, appId },
+                databaseURL, // shortcut
+                credentials: (savedUser && savedPass) ? { email: savedUser, password: savedPass } : null
+            };
+
+            state.projects[projectIndex].databases.push(newDb);
+            saveStateToLocalStorage();
+            
+            // Reset form
+            document.getElementById('db-form').reset();
+            closeModal('db-modal');
+            showToast(`Base de datos "${alias}" agregada con éxito`);
+            renderDatabases();
+            selectDatabase(newDb.id);
+        }
+
+        // Delete Database
+        window.deleteDbConfirm = function(id) {
+            if (!state.selectedProjectId) return;
+            const projIndex = state.projects.findIndex(p => p.id === state.selectedProjectId);
+            if (projIndex === -1) return;
+
+            const db = state.projects[projIndex].databases.find(d => d.id === id);
+            if (!db) return;
+
+            customConfirm(
+                "¿Eliminar Base de Datos?",
+                `¿Deseas desvincular la base de datos "${db.alias}" de la lista local?`,
+                (confirmed) => {
+                    if (confirmed) {
+                        state.projects[projIndex].databases = state.projects[projIndex].databases.filter(d => d.id !== id);
+                        if (state.selectedDbId === id) {
+                            state.selectedDbId = null;
+                            disconnectActiveDb();
+                        }
+                        saveStateToLocalStorage();
+                        renderDatabases();
+                        showToast("Base de datos eliminada de la lista", "info");
+                    }
+                }
+            );
+        }
+
+        // Select Database & Initialize connection with SWR performance enhancements
+        window.selectDatabase = async function(dbId) {
+            state.selectedDbId = dbId;
+            renderDatabases();
+
+            const proj = state.projects.find(p => p.id === state.selectedProjectId);
+            const dbConfig = proj?.databases.find(d => d.id === dbId);
+            if (!dbConfig) return;
+
+            document.getElementById('no-selection-state').classList.add('hidden');
+            document.getElementById('database-workspace').classList.remove('hidden');
+            
+            // Connect using connection cache logic
+            await connectToFirebase(dbConfig);
+        }
+
+        // Disconnect Active connection (with cache cleanup)
+        window.disconnectActiveDb = function() {
+            if (state.selectedDbId) {
+                // Remove App Instance from memory cache to allow reconfiguration
+                if (state.appsCache[state.selectedDbId]) {
+                    try {
+                        deleteApp(state.appsCache[state.selectedDbId].app);
+                    } catch(e) {
+                        console.error("No se pudo dar de baja la App", e);
+                    }
+                    delete state.appsCache[state.selectedDbId];
+                }
+            }
+
+            state.firebase.app = null;
+            state.firebase.auth = null;
+            state.firebase.db = null;
+            state.currentNodeData = null;
+            state.currentPath = "/";
+
+            document.getElementById('active-db-card').classList.add('hidden');
+            document.getElementById('database-workspace').classList.add('hidden');
+            document.getElementById('no-selection-state').classList.remove('hidden');
+
+            // Update UI status bar
+            const statusEl = document.getElementById('global-status');
+            statusEl.innerHTML = `<span class="h-2 w-2 rounded-full bg-slate-400 animate-pulse"></span> Desconectado`;
+            
+            showToast("Desconectado de Firebase", "info");
+        }
+
+        async function connectToFirebase(dbConfig) {
+            const statusEl = document.getElementById('global-status');
+            statusEl.innerHTML = `<span class="h-2 w-2 rounded-full bg-amber-500 animate-bounce"></span> Conectando...`;
+
+            // Reset UI render limit flag
+            state.forceFullJsonRender = false;
+
+            // PERFORMANCE OPTIMIZATION: If app is already cached in memory, re-establish connection instantly
+            if (state.appsCache[dbConfig.id]) {
+                const cached = state.appsCache[dbConfig.id];
+                state.firebase.app = cached.app;
+                state.firebase.auth = cached.auth;
+                state.firebase.db = cached.db;
+
+                document.getElementById('active-db-card').classList.remove('hidden');
+                document.getElementById('active-db-title').textContent = dbConfig.alias;
+
+                const currentUser = state.firebase.auth.currentUser;
+                if (currentUser) {
+                    if (currentUser.isAnonymous) {
+                        updateAuthUI("Anónimo", "");
+                    } else {
+                        updateAuthUI("Email & Password", currentUser.email || "");
+                    }
+                } else {
+                    updateAuthUI("Conectado (Sin sesión)", "");
+                }
+
+                showToast("Conexión restaurada instantáneamente", "success");
+                state.currentPath = "/";
+                await fetchNodeData(state.currentPath);
+                return;
+            }
+
+            // Fallback: Initialize new client instance
+            try {
+                const app = initializeApp(dbConfig.config, `DynamicApp_${dbConfig.id}`);
+                const auth = getAuth(app);
+                const db = getDatabase(app);
+
+                state.firebase.app = app;
+                state.firebase.auth = auth;
+                state.firebase.db = db;
+
+                // Cache it for subsequent switches
+                state.appsCache[dbConfig.id] = { app, auth, db };
+
+                document.getElementById('active-db-card').classList.remove('hidden');
+                document.getElementById('active-db-title').textContent = dbConfig.alias;
+
+                // Authentication Flow
+                if (dbConfig.credentials && dbConfig.credentials.email && dbConfig.credentials.password) {
+                    await loginWithEmailPassword(dbConfig.credentials.email, dbConfig.credentials.password);
+                } else {
+                    await loginAnonymously();
+                }
+
+            } catch(error) {
+                console.error("Error inicializando base de datos", error);
+                showToast(`Fallo crítico al conectar a Firebase: ${error.message}`, "error");
+                document.getElementById('global-status').innerHTML = `<span class="h-2 w-2 rounded-full bg-red-600"></span> Error de Config`;
+            }
+        }
+
+        // Sign In Anonymously
+        async function loginAnonymously() {
+            if (!state.firebase.auth) return;
+            
+            try {
+                const credential = await signInAnonymously(state.firebase.auth);
+                updateAuthUI("Anónimo", "");
+                showToast("Conectado con éxito de forma Anónima", "success");
+                
+                state.currentPath = "/";
+                await fetchNodeData(state.currentPath);
+            } catch(error) {
+                console.warn("Fallo de autenticación anónima.", error);
+                showToast("El inicio anónimo falló. Autenticación requerida.", "warning");
+                promptManualLogin();
+            }
+        }
+
+        // Sign In with Email/Password
+        async function loginWithEmailPassword(email, password, saveToLocalOnSuccess = false) {
+            if (!state.firebase.auth) return;
+
+            try {
+                const userCredential = await signInWithEmailAndPassword(state.firebase.auth, email, password);
+                updateAuthUI("Email & Password", email);
+                showToast(`Sesión iniciada con éxito para: ${email}`);
+
+                if (saveToLocalOnSuccess) {
+                    const projIndex = state.projects.findIndex(p => p.id === state.selectedProjectId);
+                    if (projIndex !== -1) {
+                        const dbIndex = state.projects[projIndex].databases.findIndex(d => d.id === state.selectedDbId);
+                        if (dbIndex !== -1) {
+                            state.projects[projIndex].databases[dbIndex].credentials = { email, password };
+                            saveStateToLocalStorage();
+                        }
+                    }
+                }
+
+                closeModal('auth-modal');
+                await fetchNodeData(state.currentPath || "/");
+            } catch(error) {
+                console.error("Fallo login de correo", error);
+                showToast(`Error al autenticar: ${error.message}`, "error");
+                promptManualLogin(`Fallo al autenticar: Contraseña o correo inválido.`);
+            }
+        }
+
+        // Display login dialog
+        window.promptManualLogin = function(reason = "") {
+            if (reason) {
+                document.getElementById('auth-modal-reason').textContent = reason;
+            } else {
+                document.getElementById('auth-modal-reason').textContent = "Ingresa credenciales de Email y Contraseña de tu cuenta autorizada en Firebase.";
+            }
+            openModal('auth-modal');
+        }
+
+        // Authenticate form submit
+        window.handleManualLogin = async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('auth-email-input').value.trim();
+            const pass = document.getElementById('auth-pass-input').value;
+            const remember = document.getElementById('auth-save-credentials').checked;
+
+            await loginWithEmailPassword(email, pass, remember);
+        }
+
+        // Helper to update connection metrics
+        function updateAuthUI(type, email = "") {
+            const statusEl = document.getElementById('global-status');
+            statusEl.innerHTML = `<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Conectado`;
+
+            document.getElementById('active-auth-type').textContent = `Autenticación: ${type}`;
+            const emailEl = document.getElementById('active-auth-email');
+            if (email) {
+                emailEl.textContent = email;
+                emailEl.classList.remove('hidden');
+            } else {
+                emailEl.classList.add('hidden');
+            }
+        }
+
+        window.fetchNodeData = async function(path, forceNetwork = false) {
+            if (!state.firebase.db) return;
+            
+            const cacheKey = `${state.selectedDbId}_${path}`;
+            const isCached = state.cache[cacheKey] !== undefined;
+
+            // Reset large data visualizer flags
+            state.forceFullJsonRender = false;
+
+            const refreshIcon = document.getElementById('refresh-icon');
+            refreshIcon?.classList.add('animate-spin');
+
+            // SWR OPTIMIZATION: If local cached copy exists, render instantly then fetch background updates
+            if (isCached && !forceNetwork) {
+                state.currentNodeData = state.cache[cacheKey];
+                state.currentPath = path;
+
+                // Sync Visual Components Immediately from memory
+                renderBreadcrumbs();
+                renderJsonPreview();
+                renderSubnodesList();
+                refreshIcon?.classList.remove('animate-spin');
+
+                // Perform silent background synchronization
+                const nodeRef = ref(state.firebase.db, path);
+                get(nodeRef).then((snapshot) => {
+                    const freshVal = snapshot.val();
+                    state.cache[cacheKey] = freshVal;
+
+                    // Update UI fluidly only if user hasn't navigated elsewhere
+                    if (state.currentPath === path) {
+                        state.currentNodeData = freshVal;
+                        renderJsonPreview();
+                        renderSubnodesList();
+                    }
+                }).catch(err => {
+                    console.debug("Fallo silencioso al actualizar caché en background:", err);
+                });
+
+                return;
+            }
+
+            // Normal Flow: No cache or explicit user trigger (hard refresh)
+            try {
+                const nodeRef = ref(state.firebase.db, path);
+                const snapshot = await get(nodeRef);
+                
+                const fetchedData = snapshot.val();
+                state.currentNodeData = fetchedData;
+                state.currentPath = path;
+
+                // Update SWR cache registry
+                state.cache[cacheKey] = fetchedData;
+
+                renderBreadcrumbs();
+                renderJsonPreview();
+                renderSubnodesList();
+            } catch(error) {
+                console.error("Error al leer el nodo", error);
+                if (error.message.includes("permission_denied") || error.code === "PERMISSION_DENIED") {
+                    showToast(`Permiso denegado en el nodo "${path}".`, "error");
+                    promptManualLogin(`La base de datos denegó la lectura en: "${path}". Requieres iniciar sesión.`);
+                } else {
+                    showToast(`Error al descargar datos del nodo: ${error.message}`, "error");
+                }
+            } finally {
+                refreshIcon?.classList.remove('animate-spin');
+            }
+        }
+
+        // Path Breadcrumbs Renderer
+        function renderBreadcrumbs() {
+            const container = document.getElementById('path-breadcrumbs');
+            container.innerHTML = '';
+
+            const parts = state.currentPath.split('/').filter(p => p !== '');
+            
+            // Root indicator
+            const rootSpan = document.createElement('span');
+            rootSpan.className = "hover:underline cursor-pointer flex items-center gap-0.5";
+            rootSpan.innerHTML = `root`;
+            rootSpan.onclick = () => goToPath('/');
+            container.appendChild(rootSpan);
+
+            let currentBuiltPath = "";
+            parts.forEach((part, index) => {
+                const separator = document.createElement('span');
+                separator.className = "text-slate-400 dark:text-slate-600";
+                separator.textContent = "/";
+                container.appendChild(separator);
+
+                currentBuiltPath += `/${part}`;
+                const finalPath = currentBuiltPath;
+
+                const partSpan = document.createElement('span');
+                partSpan.className = "hover:underline cursor-pointer truncate max-w-[120px] text-slate-700 dark:text-slate-200 hover:text-amber-500 dark:hover:text-amber-400";
+                partSpan.textContent = part;
+                partSpan.onclick = () => goToPath(finalPath);
+                
+                container.appendChild(partSpan);
+            });
+        }
+
+        // Go to specific path
+        window.goToPath = function(path) {
+            if (!path.startsWith('/')) path = '/' + path;
+            state.currentPath = path;
+            fetchNodeData(path);
+        }
+
+        // Reload active node (with bypass to ensure fresh payload)
+        window.refreshCurrentNode = function(force = false) {
+            fetchNodeData(state.currentPath, force);
+        }
+
+        // Navigate manually
+        window.navigateManualPath = function() {
+            const val = document.getElementById('manual-path-input').value.trim();
+            if (!val) return;
+            goToPath(val);
+            document.getElementById('manual-path-input').value = '';
+        }
+
+        function renderJsonPreview() {
+            const preview = document.getElementById('json-node-preview');
+            const warningContainer = document.getElementById('json-warning-container');
+            
+            if (state.currentNodeData === null || state.currentNodeData === undefined) {
+                preview.value = "null (O este nodo no contiene ningún dato actualmente)";
+                warningContainer.classList.add('hidden');
+                preview.classList.remove('hidden');
+                return;
+            }
+
+            const rawString = JSON.stringify(state.currentNodeData);
+            
+            // PERFORMANCE SHIELD: If data size is larger than 150KB, hide textarea and warn user
+            if (rawString.length > 150000 && !state.forceFullJsonRender) {
+                preview.classList.add('hidden');
+                warningContainer.classList.remove('hidden');
+                document.getElementById('json-size-label').textContent = `${(rawString.length / 1024).toFixed(1)} KB`;
+            } else {
+                warningContainer.classList.add('hidden');
+                preview.classList.remove('hidden');
+                preview.value = JSON.stringify(state.currentNodeData, null, 2);
+            }
+        }
+
+        window.bypassJsonWarning = function() {
+            state.forceFullJsonRender = true;
+            renderJsonPreview();
+        }
+
+        // Render Tree subnodes list
+        function renderSubnodesList() {
+            const container = document.getElementById('subnodes-container');
+            container.innerHTML = '';
+
+            const data = state.currentNodeData;
+
+            if (data === null || data === undefined || typeof data !== 'object') {
+                container.innerHTML = `
+                    <div class="p-4 text-center">
+                        <p class="text-xs text-slate-500 italic">No hay subnodos en esta ubicación (valor primitivo o nodo vacío).</p>
+                        <p class="text-[10px] text-amber-600 dark:text-amber-500 mt-1">Valor actual: "${data}"</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const keys = Object.keys(data);
+            if (keys.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-500 text-center py-8">Este nodo objeto no contiene propiedades.</p>`;
+                return;
+            }
+
+            keys.forEach(key => {
+                const val = data[key];
+                const isObject = typeof val === 'object' && val !== null;
+                const typeIcon = isObject ? 'fa-folder text-amber-500' : 'fa-tag text-slate-400';
+                
+                const btnNode = document.createElement('div');
+                btnNode.className = "flex items-center justify-between p-2 rounded hover:bg-slate-200 dark:hover:bg-slate-800/80 text-xs transition cursor-pointer group";
+                btnNode.onclick = () => {
+                    const separator = state.currentPath === '/' ? '' : '/';
+                    goToPath(`${state.currentPath}${separator}${key}`);
+                };
+
+                btnNode.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <i class="fa-solid ${typeIcon}"></i>
+                        <span class="font-mono text-slate-700 dark:text-slate-300 group-hover:text-amber-600 dark:group-hover:text-amber-400 font-semibold truncate">${key}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition">
+                        <button onclick="event.stopPropagation(); deleteSubnodeDirectConfirm('${key}')" class="text-slate-400 hover:text-red-500 p-0.5" title="Eliminar este subnodo de la nube">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(btnNode);
+            });
+        }
+
+        // Copy text helper
+        window.copyToClipboardCurrentJson = function() {
+            const preview = document.getElementById('json-node-preview');
+            preview.select();
+            
+            try {
+                document.execCommand('copy');
+                showToast("JSON copiado al portapapeles");
+            } catch(e) {
+                showToast("No se pudo copiar el JSON directamente", "error");
+            }
+        }
+
+        // --- DOWNLOAD NODE ACTION ---
+        window.downloadActiveNode = function() {
+            if (state.currentNodeData === null || state.currentNodeData === undefined) {
+                showToast("No hay datos en este nodo para exportar.", "warning");
+                return;
+            }
+
+            try {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.currentNodeData, null, 2));
+                const downloadAnchor = document.createElement('a');
+                
+                let fileName = 'rtdb_root_backup.json';
+                if (state.currentPath !== '/') {
+                    const cleaned = state.currentPath.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    fileName = `rtdb_${cleaned}.json`;
+                }
+
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", fileName);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+
+                showToast(`Backup descargado con éxito: ${fileName}`);
+            } catch(e) {
+                showToast(`Error al procesar la descarga: ${e.message}`, "error");
+            }
+        }
+
+        // --- UPLOAD / WRITE NODE ACTION (with Cache Invalidation) ---
+        window.triggerUploadExecution = async function() {
+            if (!state.firebase.db) {
+                showToast("No hay conexión activa a la base de datos", "error");
+                return;
+            }
+
+            const rawJsonText = document.getElementById('raw-upload-json').value.trim();
+            if (!rawJsonText) {
+                showToast("Escribe o arrastra un archivo JSON primero", "warning");
+                return;
+            }
+
+            let parsedData;
+            try {
+                parsedData = JSON.parse(rawJsonText);
+            } catch(e) {
+                showToast("JSON inválido. Revisa la sintaxis antes de guardar.", "error");
+                return;
+            }
+
+            const selectedStrategy = document.querySelector('input[name="upload-strategy"]:checked').value;
+            const targetPath = state.currentPath;
+
+            customConfirm(
+                `¿Ejecutar Carga (${selectedStrategy.toUpperCase()})?`,
+                `Vas a escribir datos mediante ${selectedStrategy === 'set' ? 'Reemplazo total' : 'Combinación'} en la ruta: "${targetPath}". ¿Confirmar operación?`,
+                async (confirmed) => {
+                    if (confirmed) {
+                        try {
+                            const nodeRef = ref(state.firebase.db, targetPath);
+                            if (selectedStrategy === 'set') {
+                                await set(nodeRef, parsedData);
+                            } else {
+                                if (typeof parsedData !== 'object' || parsedData === null) {
+                                    throw new Error("Para actualizar (Update), la raíz del JSON debe ser un Objeto/Diccionario.");
+                                }
+                                await update(nodeRef, parsedData);
+                            }
+
+                            // Cache Invalidation on Mutation
+                            const cacheKey = `${state.selectedDbId}_${targetPath}`;
+                            delete state.cache[cacheKey];
+
+                            showToast("Base de datos actualizada con éxito", "success");
+                            closeModal('upload-modal');
+                            document.getElementById('raw-upload-json').value = '';
+                            
+                            await fetchNodeData(targetPath, true);
+                        } catch(error) {
+                            console.error("Fallo de subida", error);
+                            if (error.message.includes("permission_denied") || error.code === "PERMISSION_DENIED") {
+                                showToast("Permiso denegado al escribir en esta ruta. Requieres autenticación.", "error");
+                                promptManualLogin(`Permiso denegado para escribir en: "${targetPath}". Intenta iniciar sesión.`);
+                            } else {
+                                showToast(`Error al escribir datos: ${error.message}`, "error");
+                            }
+                        }
+                    }
+                }
+            );
+        }
+
+        // --- CREATE SUBNODE ACTION (with Cache Invalidation) ---
+        window.handleCreateSubnode = async function(e) {
+            e.preventDefault();
+            if (!state.firebase.db) return;
+
+            const key = document.getElementById('new-node-key').value.trim();
+            const rawVal = document.getElementById('new-node-value').value.trim();
+
+            if (!key) {
+                showToast("Debes ingresar un nombre de clave válido", "warning");
+                return;
+            }
+
+            if (/[[\].#$/]/.test(key)) {
+                showToast("El nombre de la clave no debe contener '.', '#', '$', '[', o ']'", "error");
+                return;
+            }
+
+            let parsedValue = rawVal;
+            if (rawVal !== '') {
+                try {
+                    parsedValue = JSON.parse(rawVal);
+                } catch(error) {
+                    parsedValue = rawVal;
+                }
+            } else {
+                parsedValue = "";
+            }
+
+            const separator = state.currentPath === '/' ? '' : '/';
+            const fullTargetSubnodePath = `${state.currentPath}${separator}${key}`;
+
+            try {
+                const subnodeRef = ref(state.firebase.db, fullTargetSubnodePath);
+                await set(subnodeRef, parsedValue);
+
+                // Invalidate parent cache to force reload and display new subnode
+                const parentCacheKey = `${state.selectedDbId}_${state.currentPath}`;
+                delete state.cache[parentCacheKey];
+
+                showToast(`Subnodo "${key}" creado con éxito`);
+                
+                document.getElementById('add-node-form').reset();
+                closeModal('add-node-modal');
+                
+                await fetchNodeData(state.currentPath, true);
+            } catch(error) {
+                console.error("Error guardando subnodo", error);
+                if (error.message.includes("permission_denied") || error.code === "PERMISSION_DENIED") {
+                    showToast("No tienes permisos de escritura en este nodo.", "error");
+                    promptManualLogin(`Sin permisos para agregar subnodos en: "${state.currentPath}". Ingresa tus credenciales.`);
+                } else {
+                    showToast(`Error al crear subnodo: ${error.message}`, "error");
+                }
+            }
+        }
+
+        // --- DIRECT DELETE SUBNODE ---
+        window.deleteSubnodeDirectConfirm = function(key) {
+            const separator = state.currentPath === '/' ? '' : '/';
+            const fullPathToDelete = `${state.currentPath}${separator}${key}`;
+
+            customConfirm(
+                "¿Eliminar Subnodo?",
+                `¿Deseas eliminar permanentemente el subnodo "${key}" de la base de datos en tiempo real? Ruta: ${fullPathToDelete}`,
+                async (confirmed) => {
+                    if (confirmed) {
+                        try {
+                            const subnodeRef = ref(state.firebase.db, fullPathToDelete);
+                            await set(subnodeRef, null); 
+
+                            // Invalidate parent cache
+                            const parentCacheKey = `${state.selectedDbId}_${state.currentPath}`;
+                            delete state.cache[parentCacheKey];
+
+                            showToast(`Subnodo "${key}" eliminado con éxito`, "success");
+                            
+                            await fetchNodeData(state.currentPath, true);
+                        } catch(error) {
+                            console.error("Fallo al borrar subnodo", error);
+                            if (error.message.includes("permission_denied") || error.code === "PERMISSION_DENIED") {
+                                showToast("Acceso denegado para borrar este nodo.", "error");
+                                promptManualLogin(`Falta de permisos para remover: "${fullPathToDelete}".`);
+                            } else {
+                                showToast(`Error al eliminar: ${error.message}`, "error");
+                            }
+                        }
+                    }
+                }
+            );
+        }
+
+    </script>
+</body>
+</html>
