@@ -301,7 +301,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getStorage, ref, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-        import { Download_DB_Regas, firebaseConfig } from "../../../config.js";
+        import { Download_DB_Regas, Access_DB_Regas_Field, firebaseConfig } from "../../../config.js";
 
         // ESTADOS DE LA APLICACIÓN
         let fechaSeleccionada = new Date(); // Fecha de consulta
@@ -365,6 +365,18 @@
             });
         }
 
+        // HELPER PARA BUSCAR TURNOS SIN IMPORTAR CASING (Soporta matutino y Matutino)
+        function obtenerTurnoObjeto(infoGuardia, turnoNombre) {
+            if (!infoGuardia) return null;
+            const tLower = turnoNombre.toLowerCase();
+            for (const key of Object.keys(infoGuardia)) {
+                if (key.toLowerCase() === tLower) {
+                    return { key: key, value: infoGuardia[key] };
+                }
+            }
+            return null;
+        }
+
         // CONTROLADORES DE ARRASTRE (DRAG AND DROP)
         function iniciarDrag(e, guardId) {
             isDragging = true;
@@ -409,11 +421,15 @@
                         let regasDia = req.result || {};
                         let turnKey = pestañaActiva === 'enturno' ? obtenerTurnoActualPorHora() : pestañaActiva;
                         
+                        // Localizar turno correcto usando el helper para mantener el casing existente del registro
+                        const turnoObj = obtenerTurnoObjeto(regasDia[id], turnKey);
+                        const claveFinal = turnoObj ? turnoObj.key : turnKey;
+
                         if (regasDia[id]) {
-                            if (!regasDia[id][turnKey]) {
-                                regasDia[id][turnKey] = {};
+                            if (!regasDia[id][claveFinal]) {
+                                regasDia[id][claveFinal] = {};
                             }
-                            regasDia[id][turnKey].Caseta = nuevaCaseta;
+                            regasDia[id][claveFinal].Caseta = nuevaCaseta;
                             store.put(regasDia, fechaKey);
                         }
                     };
@@ -821,15 +837,18 @@
                 // Recopilar todos los guardias asignados a esta caseta para el turno activo
                 const guardiasAsignados = [];
                 
-                // 1. Buscar guardias desde regasDia (Asignaciones dinámicas con ID)
+                // 1. Buscar guardias desde regasDia (Asignaciones dinámicas con ID insensible a mayúsculas/minúsculas)
                 for (const [id, info] of Object.entries(regasDia)) {
-                    if (info && info[turnKey] && info[turnKey].Caseta) {
-                        if (String(info[turnKey].Caseta).trim().toLowerCase() === nombreCaseta.trim().toLowerCase()) {
-                            guardiasAsignados.push({
-                                id: id,
-                                nombre: info.nombre || `ID: ${id}`,
-                                tipo: 'regas'
-                            });
+                    if (info) {
+                        const turnoObj = obtenerTurnoObjeto(info, turnKey);
+                        if (turnoObj && turnoObj.value && turnoObj.value.Caseta) {
+                            if (String(turnoObj.value.Caseta).trim().toLowerCase() === nombreCaseta.trim().toLowerCase()) {
+                                guardiasAsignados.push({
+                                    id: id,
+                                    nombre: info.nombre || `ID: ${id}`,
+                                    tipo: 'regas'
+                                });
+                            }
                         }
                     }
                 }
@@ -873,11 +892,8 @@
                 }
 
                 // --- LÓGICA DE OCULTAMIENTO INTELIGENTE ---
-                // No retornamos de inmediato para que la caseta vacía exista en el DOM y responda al Drag
                 const estaVacia = guardiasAsignados.length === 0;
                 const claseOcultar = estaVacia ? 'caseta-vacia-oculta' : '';
-
-                // Estilo visual si la caseta está vacía en modo arrastre (Modo Fantasma)
                 const ghostStyle = (!estaVacia) ? 'hover:shadow-md' : '';
 
                 card.className = `bg-white border-0 border-l-4 ${color.borderL} rounded-r-xl shadow-sm transition-all flex flex-col justify-between overflow-hidden relative pb-1 ${claseOcultar} ${ghostStyle}`;
@@ -892,11 +908,82 @@
                     panelGuardiasHTML = guardiasAsignados.map(g => {
                         const imgIdGuardia = `guard-img-${nombreCaseta.replace(/\s+/g, '-')}-${g.id}`;
                         const esDraggable = g.tipo === 'regas'; // Solo los reales se pueden arrastrar
+                        
+                        // --- INTEGRACIÓN DE BOTONES INTERACTIVOS ENTRADA/SALIDA ---
+                        let botonInteractivoHTML = "";
+                        let ringClase = "";
+                        let borderClase = "border-slate-200/60";
+                        
+                        if (g.tipo === 'regas') {
+                            const infoGuardia = regasDia[g.id] || {};
+                            
+                            // 1. Detectar si el guardia tiene un turno activo (entrada sin salida) en cualquier horario (insensible a mayúsculas/minúsculas)
+                            let turnoActivoDetectado = null;
+                            for (const t of ['matutino', 'vespertino', 'nocturno']) {
+                                const turnoObj = obtenerTurnoObjeto(infoGuardia, t);
+                                if (turnoObj && turnoObj.value?.entrada && !turnoObj.value?.salida) {
+                                    turnoActivoDetectado = turnoObj.key; // Mantenemos el casing de clave exacto de IndexedDB (ej. 'Matutino')
+                                    break;
+                                }
+                            }
+
+                            // 2. Determinar con qué turno evaluaremos su estado actual
+                            const turnoAEvaluar = turnoActivoDetectado || turnKey;
+                            const turnoObjAEvaluar = obtenerTurnoObjeto(infoGuardia, turnoAEvaluar);
+                            const turnoInfo = turnoObjAEvaluar ? turnoObjAEvaluar.value : {};
+                            const tieneEntrada = !!turnoInfo.entrada;
+                            const tieneSalida = !!turnoInfo.salida;
+                            
+                            // Debug logs explicativos en tu consola de navegador
+                            console.log(`[Turnos Debug] Guardia: ${g.nombre} (${g.id}) | Turno Evaluado: ${turnoAEvaluar} | Entrada: ${turnoInfo.entrada || 'No'} | Salida: ${turnoInfo.salida || 'No'}`);
+                            
+                            // Validar coincidencia de fecha con el día real actual
+                            const hoy = new Date();
+                            const hoyStr = `${String(hoy.getDate()).padStart(2, '0')}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${hoy.getFullYear()}`;
+                            const esHoy = (fechaRegasKey === hoyStr);
+                            
+                            // Validar ventanas de horario de entrada según el turno (normalizado a minúsculas)
+                            const horaActual = hoy.getHours();
+                            let dentroDeRango = false;
+                            const turnoAEvaluarLower = turnoAEvaluar.toLowerCase();
+                            if (turnoAEvaluarLower === 'matutino' && horaActual >= 5 && horaActual < 12) {
+                                dentroDeRango = true;
+                            } else if (turnoAEvaluarLower === 'vespertino' && horaActual >= 12 && horaActual < 17) {
+                                dentroDeRango = true;
+                            } else if (turnoAEvaluarLower === 'nocturno' && horaActual >= 17 && horaActual < 23) {
+                                dentroDeRango = true;
+                            }
+
+                            if (tieneEntrada && !tieneSalida) {
+                                ringClase = "shadow-[0_0_8px_rgba(16,185,129,0.6)]"; // Sombra de resplandor verde esmeralda
+                                borderClase = "border-emerald-500 border-2"; // Borde físico verde esmeralda impecable
+                                if (esHoy) {
+                                    botonInteractivoHTML = `
+                                        <button onclick="registrarSalida('${g.id}', '${turnoAEvaluar}')" 
+                                                title="Registrar Salida" 
+                                                class="w-6 h-6 rounded-full bg-red-800 hover:bg-red-700 text-white flex items-center justify-center transition-all active:scale-90 shrink-0 shadow-sm ml-2">
+                                            <i class="fa-solid fa-door-closed text-[10px]"></i>
+                                        </button>
+                                    `;
+                                }
+                            } else if (!tieneEntrada) {
+                                if (esHoy && dentroDeRango) {
+                                    botonInteractivoHTML = `
+                                        <button onclick="registrarEntrada('${g.id}', '${turnoAEvaluar}')" 
+                                                title="Registrar Entrada" 
+                                                class="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all active:scale-90 shrink-0 shadow-sm ml-2">
+                                            <i class="fa-solid fa-door-open text-[10px]"></i>
+                                        </button>
+                                    `;
+                                }
+                            }
+                        }
+                        
                         return `
                             <div class="flex items-center justify-between bg-white/70 p-1.5 rounded-lg border border-slate-200/40 min-h-[38px] transition-all hover:bg-zinc-50/80 shadow-sm" 
                                  ${esDraggable ? `draggable="true" ondragstart="iniciarDrag(event, '${g.id}')" ondragend="finalizarDrag()"` : ''}>
                                 <div class="flex items-center gap-2 min-w-0 ${esDraggable ? 'cursor-grab active:cursor-grabbing' : ''}">
-                                    <div id="${imgIdGuardia}" class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/60 overflow-hidden">
+                                    <div id="${imgIdGuardia}" class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border ${borderClase} ${ringClase} overflow-hidden">
                                         <i class="fa-solid fa-user text-slate-300 text-[9px]"></i>
                                     </div>
                                     <div class="min-w-0">
@@ -906,7 +993,10 @@
                                         </p>
                                     </div>
                                 </div>
-                                ${g.tipo === 'manual' ? `<span class="text-[7px] font-semibold bg-amber-50 text-amber-600 border border-amber-100/60 px-1 py-0.5 rounded uppercase tracking-wide">Manual</span>` : ''}
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    ${g.tipo === 'manual' ? `<span class="text-[7px] font-semibold bg-amber-50 text-amber-600 border border-amber-100/60 px-1 py-0.5 rounded uppercase tracking-wide">Manual</span>` : ''}
+                                    ${botonInteractivoHTML}
+                                </div>
                             </div>
                         `;
                     }).join('');
@@ -946,7 +1036,6 @@
                             </div>
                             
                             <!-- CONTROLES METÁLICOS -->
-                           <!-- CONTROLES METÁLICOS -->
                             <div class="flex items-center gap-1 shrink-0">
                                 ${enVivoInfo}
                                 <!-- Botón de personalizar en el encabezado -->
@@ -965,7 +1054,7 @@
                             </div>
                         </div>
                         
-                        <!-- PANEL DE ESTATUS DE LOS GUARDIAS (Soporta múltiples elementos de forma estéticamente unificada) -->
+                        <!-- PANEL DE ESTATUS DE LOS GUARDIAS -->
                         <div class="p-2 bg-slate-50/40 flex flex-col gap-1.5 min-h-[44px]">
                             ${panelGuardiasHTML}
                         </div>
@@ -1134,9 +1223,26 @@
                     }
 
                     putRequest.onsuccess = () => {
-                        cerrarModalPersonalizar();
-                        renderizarCasetas();
-                        mostrarToast(`Cabecera de ${personalizationCaseta} personalizada`);
+                        // Sincronizar con Firebase RTDB (REST API)
+                        const rtdbUrl = `https://regas.firebaseio.com/casetas/${encodeURIComponent(personalizationCaseta)}/bgHeader.json`;
+                        fetch(rtdbUrl, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(record.bgHeader)
+                        })
+                        .then(() => {
+                            cerrarModalPersonalizar();
+                            renderizarCasetas();
+                            mostrarToast(`Cabecera de ${personalizationCaseta} personalizada y guardada en la nube`);
+                        })
+                        .catch(err => {
+                            console.error("Error al sincronizar color en Firebase RTDB:", err);
+                            cerrarModalPersonalizar();
+                            renderizarCasetas();
+                            mostrarToast(`Cabecera de ${personalizationCaseta} guardada localmente`);
+                        });
                     };
                 };
             } catch (err) {
@@ -1167,9 +1273,22 @@
                     }
 
                     putRequest.onsuccess = () => {
-                        cerrarModalPersonalizar();
-                        renderizarCasetas();
-                        mostrarToast(`Restaurado estilo original de ${personalizationCaseta}`);
+                        // Eliminar de Firebase RTDB (REST API)
+                        const rtdbUrl = `https://regas.firebaseio.com/casetas/${encodeURIComponent(personalizationCaseta)}/bgHeader.json`;
+                        fetch(rtdbUrl, {
+                            method: 'DELETE'
+                        })
+                        .then(() => {
+                            cerrarModalPersonalizar();
+                            renderizarCasetas();
+                            mostrarToast(`Restaurado estilo original de ${personalizationCaseta} en local y la nube`);
+                        })
+                        .catch(err => {
+                            console.error("Error al eliminar estilo en Firebase RTDB:", err);
+                            cerrarModalPersonalizar();
+                            renderizarCasetas();
+                            mostrarToast(`Restaurado estilo original de ${personalizationCaseta} localmente`);
+                        });
                     };
                 };
             } catch (err) {
@@ -1381,6 +1500,98 @@
                 .replace(/'/g, "&#039;");
         }
 
+        // REGISTRADORES DE TIEMPO SÍNCRONOS CON INDEXEDDB Y LA NUBE (ACCESS_DB_REGAS_FIELD)
+        async function registrarEntrada(id, turno) {
+            const ahora = new Date();
+            const hh = String(ahora.getHours()).padStart(2, '0');
+            const mm = String(ahora.getMinutes()).padStart(2, '0');
+            const horaStr = `${hh}:${mm}`;
+            const fechaKey = formatearFechaRegas(fechaSeleccionada);
+            
+            mostrarToast(`Registrando entrada para elemento...`);
+            
+            try {
+                // 1. Guardar Localmente
+                await guardarRegistroTiempoLocal(id, turno, 'entrada', horaStr);
+                
+                // 2. Guardar en la Nube con la función importada
+                const turnoCapitalizado = turno.charAt(0).toUpperCase() + turno.slice(1);
+                await Access_DB_Regas_Field(fechaKey, id, turnoCapitalizado, 'entrada', 'write', horaStr);
+                
+                mostrarToast(`Entrada registrada: ${horaStr}`);
+            } catch (err) {
+                console.error("Error al registrar entrada en la nube:", err);
+                mostrarToast("Guardado localmente. Error al sincronizar con la nube.");
+            }
+            
+            renderizarCasetas();
+        }
+
+        async function registrarSalida(id, turno) {
+            const ahora = new Date();
+            const hh = String(ahora.getHours()).padStart(2, '0');
+            const mm = String(ahora.getMinutes()).padStart(2, '0');
+            const horaStr = `${hh}:${mm}`;
+            const fechaKey = formatearFechaRegas(fechaSeleccionada);
+            
+            mostrarToast(`Registrando salida para elemento...`);
+            
+            try {
+                // 1. Guardar Localmente
+                await guardarRegistroTiempoLocal(id, turno, 'salida', horaStr);
+                
+                // 2. Guardar en la Nube con la función importada
+                const turnoCapitalizado = turno.charAt(0).toUpperCase() + turno.slice(1);
+                await Access_DB_Regas_Field(fechaKey, id, turnoCapitalizado, 'salida', 'write', horaStr);
+                
+                mostrarToast(`Salida registrada: ${horaStr}`);
+            } catch (err) {
+                console.error("Error al registrar salida en la nube:", err);
+                mostrarToast("Guardado localmente. Error al sincronizar con la nube.");
+            }
+            
+            renderizarCasetas();
+        }
+
+        // Función de utilidad local para persistir de forma transaccional el registro de entrada/salida
+        function guardarRegistroTiempoLocal(id, turno, campo, valor) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    const db = await getDB();
+                    const tx = db.transaction("regas", "readwrite");
+                    const store = tx.objectStore("regas");
+                    const fechaKey = formatearFechaRegas(fechaSeleccionada);
+                    
+                    const req = store.get(fechaKey);
+                    req.onsuccess = () => {
+                        let regasDia = req.result || {};
+                        if (regasDia[id]) {
+                            // Localizar turno correcto usando el helper insensible a casing
+                            let claveTurnoExistente = null;
+                            for (const k of Object.keys(regasDia[id])) {
+                                if (k.toLowerCase() === turno.toLowerCase()) {
+                                    claveTurnoExistente = k;
+                                    break;
+                                }
+                            }
+                            const claveFinal = claveTurnoExistente || turno;
+
+                            if (!regasDia[id][claveFinal]) {
+                                regasDia[id][claveFinal] = {};
+                            }
+                            regasDia[id][claveFinal][campo] = valor;
+                            store.put(regasDia, fechaKey);
+                        }
+                    };
+
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = (e) => reject(e.target.error);
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+
         // EXPOSICIÓN DE LAS FUNCIONES AL CONTEXTO WINDOW PARA LAS ACCIONES ONCLICK / DRAG
         window.navegarDias = navegarDias;
         window.cambiarFecha = cambiarFecha;
@@ -1399,6 +1610,8 @@
         window.iniciarDrag = iniciarDrag;
         window.finalizarDrag = finalizarDrag;
         window.soltarDrag = soltarDrag;
+        window.registrarEntrada = registrarEntrada;
+        window.registrarSalida = registrarSalida;
 
         // INICIALIZACIÓN DIRECTA (sin depender del evento DOMContentLoaded)
         async function inicializarApp() {

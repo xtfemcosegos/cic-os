@@ -135,7 +135,7 @@
     <script type="module">
         // Importamos módulos esenciales y la configuración de Firebase
         import { firebaseConfig, initializeApp, getAuth, onAuthStateChanged, getDatabase, ref, get, getStorage, storageRef, getDownloadURL, signOut } from "../config.js";
-        import { fetchApps } from "../config.js";
+        import { fetchApps,Download_DB_Casetas,Download_DB_Elementos } from "../config.js";
 
         // Inicializamos las instancias requeridas
         const app = initializeApp(firebaseConfig);
@@ -425,6 +425,8 @@
             initClock();
             fetchWeather();
         });
+        Download_DB_Elementos();
+        Download_DB_Casetas();
     </script>
 
     <!-- Script de control de interfaz interactiva para el menú lateral (Trigger único del logo) -->
